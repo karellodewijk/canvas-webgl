@@ -30,7 +30,7 @@ Missing features:
 Used libraries:
 
 Major ones are:
-	- I use https://github.com/deanm/css-color-parser-js to parse css color strings. 
-	- https://github.com/mapbox/earcut for triangulation.
+- https://github.com/deanm/css-color-parser-js to parse css color strings. 
+- https://github.com/mapbox/earcut for triangulation.
 
 There are some smaller bits, attribuited in the source code
