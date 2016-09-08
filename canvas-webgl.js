@@ -1613,18 +1613,6 @@
 			
 			return [new_path, to_draw_or_not_to_draw];
 		},
-		get lineWidth() {
-			return this.gl.getParameter(this.gl.LINE_WIDTH);
-		},
-		set lineWidth(new_line_width) {
-			this.gl.lineWidth(new_line_width);
-			var range = this.gl.getParameter(this.gl.ALIASED_LINE_WIDTH_RANGE);
-			if (new_line_width >= range[0] && new_line_width <= range[1]) {
-				this.lineWidthSupported = true;
-			} else {
-				this.lineWidthSupported = false;
-			}
-		},
 		get fillStyle() {
 			return this._fillStyle;
 		},
@@ -2125,6 +2113,10 @@
 			}
 			
 			if (!use_linedash && this.lineWidth == 1) {
+				var transform = matrixMultiply(this._transform, this.projectionMatrix);
+				gl.uniformMatrix4fv(program.transformLocation, false, transform);
+				gl.uniform1f(program.globalAlphaLocation, this.globalAlpha);
+				this._set_zindex();
 				gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);
 				gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);	
 				gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(array), gl.STATIC_DRAW);
@@ -2228,6 +2220,7 @@
 			_ctx.lineWidth = this.lineWidth;
 			_ctx.direction = this.direction;
 			_ctx.textBaseline = this.textBaseline;
+			
 									
 			// _ctx.textBaseline = this.textBaseline;
 			var dim = _ctx.measureText(msg);
@@ -2249,6 +2242,7 @@
 			_ctx.direction = this.direction;
 			_ctx.textBaseline = this.textBaseline;	
 			_ctx.imageSmoothingEnabled = false;	
+			_ctx.globalAlpha = this.globalAlpha;
 				
 			return _ctx;
 		},

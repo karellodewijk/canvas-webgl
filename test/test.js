@@ -28,8 +28,12 @@ test_webgl
  
 window.onload = function() {
 	do_test(function(ctx) {	
-		ctx.beginPath();
-		ctx.ellipse(100, 100, 50, 75, 45 * Math.PI/180, 0, 2 * Math.PI);
-		ctx.stroke();
+	 ctx.rotate(0.2)
+	 
+	 ctx.strokeStyle = "rgb(128,128,50)";
+	 ctx.strokeRect(4, 4, 102, 102);
+	 
+	 ctx.fillStyle = "rgb(255,255,150)";
+	 ctx.fillRect(5, 5, 100, 100);
 	});	
 }
