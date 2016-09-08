@@ -1933,6 +1933,8 @@
 			}
 		},
 		__prepareStroke(array, closed, lineWidthDiv2, use_linedash) {
+			//note: if closed, expects array[0:1] == array[-2:-1]
+			
 			//Polyline algorithm, take a piece of paper and draw it if you want to understand what is happening
 			//If stroking turns out to be slow, here will be your problem. This should and can easily 
 			//be implemented in a geometry shader or something so it runs on the gpu. But webgl doesn't
@@ -1947,14 +1949,9 @@
 			var triangle_buffer = [];
 			var to_draw_buffer = [];
 			
-			if (closed) {
-				array.push(array[2], array[3]);
-				if (use_linedash) {
-					to_draw_or_not_to_draw.push(to_draw_or_not_to_draw[1]);
-				}
-			}
-
 			var previous_triangle_buffer_length = 0;
+			
+			var last_point;
 			if (!closed) {
 				var line = [array[2] - array[0], array[3] - array[1]]
 				var l = Math.sqrt(Math.pow(line[0],2) + Math.pow(line[1],2))
@@ -1984,8 +1981,7 @@
 						to_draw_buffer.push(to_draw);
 					}
 					previous_triangle_buffer_length = triangle_buffer.length;
-				}
-				
+				}	
 			}
 			
 			
@@ -2000,7 +1996,6 @@
 				normal[0] /= l
 				normal[1] /= l
 				
-				//tangent = ||p2-p1| + |p1-p0||
 				var p2minp1 = [array[i+2] - array[i], array[i+3] - array[i+1]]
 				l = Math.sqrt(Math.pow(p2minp1[0],2) + Math.pow(p2minp1[1],2))
 				p2minp1[0] /= l; p2minp1[1] /= l; 				
@@ -2019,8 +2014,6 @@
 				a = [array[i] + length * miter[0], array[i+1] + length * miter[1]]
 				b = [array[i] - length * miter[0], array[i+1] - length * miter[1]]
 							
-				
-
 				if (this.lineJoin == 'miter' && (1/dot) <= this.miterLimit) {
 					//miter
 					triangle_buffer.push(a[0], a[1], b[0], b[1]);
