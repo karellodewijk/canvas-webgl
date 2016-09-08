@@ -394,7 +394,7 @@
 	}
 	
 	var CanvasPattern = function(image, repetition) {
-		this.image = image;
+		this.image = new Image(image);
 		this.repetition = repetition;
 	}
 	
@@ -438,25 +438,28 @@
 			gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);				
 			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(points), gl.STATIC_DRAW);
 			
+			var iw = this.image.naturalWidth, ih = this.image.naturalHeight; 
 			if (this.repetition == 'repeat-x') {
-				height = this.image.height;
+				height =  ih;
 			} else if (this.repetition == 'repeat-y') {
-				width = this.image.width;
+				width = iw;
 			} else if (this.repetition == 'no-repeat') {
-				width = this.image.width;
-				height = this.image.height;
+				width = iw;
+				height =  ih;
 			}				
-			
-			for (var x=0; x < width; x+=this.image.width) {
-				for (var y=0; y < height; y+=this.image.height) {				
-					var projectionMatrix = [
-						 1/this.image.width, 0, 0, 0,
-						 0, 1/this.image.height, 0, 0,
-						 0, 0, 1, 0,
-						 -x/this.image.width, -y/this.image.height, 0, 1
-					];
-					gl.uniformMatrix4fv(program.textureMatrixLocation, false, projectionMatrix);
-					gl.drawArrays(gl.TRIANGLE_FAN, 0, points.length/2);
+						
+			if (iw > 0 && ih > 0) {
+				for (var x=0; x < width; x+=iw) {
+					for (var y=0; y < height; y+=ih) {				
+						var projectionMatrix = [
+							 1/iw, 0, 0, 0,
+							 0, 1/ih, 0, 0,
+							 0, 0, 1, 0,
+							 -x/iw, -y/ih, 0, 1
+						];
+						gl.uniformMatrix4fv(program.textureMatrixLocation, false, projectionMatrix);
+						gl.drawArrays(gl.TRIANGLE_FAN, 0, points.length/2);
+					}
 				}
 			}
 
@@ -1928,6 +1931,7 @@
 			});
 
 			var transform = matrixMultiply(this._transform, this.projectionMatrix);
+			
 			gl.uniformMatrix4fv(program.transformLocation, false, transform);
 			gl.uniform1f(program.globalAlphaLocation, this.globalAlpha);
 			this._set_zindex();

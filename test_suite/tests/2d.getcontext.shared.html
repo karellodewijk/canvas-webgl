@@ -12,7 +12,7 @@
  <a href="index.html">[index]</a>
  <a href="2d.voidreturn.html" accesskey="n" title="[n] 2d.voidreturn">&gt;</a>
 <h1><a href="index.2d.html">2d</a>.<a href="index.2d.getcontext.html">getcontext</a>.shared</h1>
-<p class="desc">getContext('2d') returns objects which share canvas state</p>
+<p class="desc">getContext('webgl-2d') returns objects which share canvas state</p>
 <div class="refs">References:
 <ul>
 <li><a href="spec.html#testrefs.context.2d.unique">context.2d.unique</a>
@@ -27,7 +27,7 @@
 <script>
 _addTest(function(canvas, ctx) {
 
-var ctx2 = canvas.getContext('2d');
+var ctx2 = canvas.getContext('webgl-2d');
 ctx.fillStyle = '#f00';
 ctx2.fillStyle = '#0f0';
 ctx.fillRect(0, 0, 100, 50);

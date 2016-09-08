@@ -12,7 +12,7 @@
  <a href="index.html">[index]</a>
  <a href="2d.getcontext.shared.html" accesskey="n" title="[n] 2d.getcontext.shared">&gt;</a>
 <h1><a href="index.2d.html">2d</a>.<a href="index.2d.getcontext.html">getcontext</a>.unique</h1>
-<p class="desc">getContext('2d') returns the same object</p>
+<p class="desc">getContext('webgl-2d') returns the same object</p>
 <div class="refs">References:
 <ul>
 <li><a href="spec.html#testrefs.context.2d.unique">context.2d.unique</a>
@@ -27,7 +27,7 @@
 <script>
 _addTest(function(canvas, ctx) {
 
-_assertSame(canvas.getContext('2d'), canvas.getContext('2d'), "canvas.getContext('2d')", "canvas.getContext('2d')");
+_assertSame(canvas.getContext('webgl-2d'), canvas.getContext('webgl-2d'), "canvas.getContext('webgl-2d')", "canvas.getContext('webgl-2d')");
 
 
 });

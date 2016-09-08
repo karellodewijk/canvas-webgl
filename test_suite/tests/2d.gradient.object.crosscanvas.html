@@ -28,7 +28,7 @@ _addTest(function(canvas, ctx) {
 
 ctx.fillStyle = '#f00';
 ctx.fillRect(0, 0, 100, 50);
-var g = document.createElement('canvas').getContext('2d').createLinearGradient(0, 0, 100, 0);
+var g = document.createElement('canvas').getContext('webgl-2d').createLinearGradient(0, 0, 100, 0);
 g.addColorStop(0, '#0f0');
 g.addColorStop(1, '#0f0');
 ctx.fillStyle = g;

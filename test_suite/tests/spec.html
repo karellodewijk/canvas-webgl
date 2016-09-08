@@ -200,7 +200,7 @@
   <div class="example">
    <p>Only one square appears to be drawn in the following example:</p>
    <pre>  // canvas is a reference to a &lt;canvas&gt; element
-  var context = canvas.getContext('2d');
+  var context = canvas.getContext('webgl-2d');
   context.fillRect(0,0,50,50);
   canvas.setAttribute('width', '300'); // clears the canvas
   context.fillRect(0,100,50,50);
@@ -2058,7 +2058,7 @@ notes on what would need to be defined for dashed lines:
  function drawBs() { /* ... */ }
  function redraw() {
    var canvas = document.getElementsByTagName('canvas')[0];
-   var context = canvas.getContext('2d');
+   var context = canvas.getContext('webgl-2d');
    context.clearRect(0, 0, canvas.width, canvas.height);
    drawCheckbox(context, document.getElementById('showA'), 20, 40);
    drawCheckbox(context, document.getElementById('showB'), 20, 60);
@@ -2070,7 +2070,7 @@ notes on what would need to be defined for dashed lines:
  }
  function processClick(event) {
    var canvas = document.getElementsByTagName('canvas')[0];
-   var context = canvas.getContext('2d');
+   var context = canvas.getContext('webgl-2d');
    var x = event.clientX - canvas.offsetLeft;
    var y = event.clientY - canvas.offsetTop;
    drawCheckbox(context, document.getElementById('showA'), 20, 40);
@@ -2990,7 +2990,7 @@ context.getImageData(0, 0, w, h);</pre>
    <code><a href="#imagedata">ImageData</a></code> object so that it can draw onto it.</p>
 
    <pre>// canvas is a reference to a &lt;canvas&gt; element
-var context = canvas.getContext('2d');
+var context = canvas.getContext('webgl-2d');
 
 // create a blank slate
 var data = context.createImageData(canvas.width, canvas.height);
@@ -3027,7 +3027,7 @@ function AddCloud(data, x, y) { ... }</pre>
    }
    function demo() {
      var canvas = document.getElementsByTagName('canvas')[0];
-     var context = canvas.getContext('2d');
+     var context = canvas.getContext('webgl-2d');
 
      // draw the image onto the canvas
      context.drawImage(image, 0, 0);
@@ -3114,7 +3114,7 @@ function AddCloud(data, x, y) { ... }</pre>
   <pre>&lt;canvas width=&quot;800&quot; height=&quot;450&quot;&gt;&lt;/canvas&gt;
 &lt;script&gt;
 
- var context = document.getElementsByTagName('canvas')[0].getContext('2d');
+ var context = document.getElementsByTagName('canvas')[0].getContext('webgl-2d');
 
  var lastX = context.canvas.width * Math.random();
  var lastY = context.canvas.height * Math.random();
