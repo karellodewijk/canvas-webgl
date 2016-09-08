@@ -3,7 +3,7 @@ A canvas2d api implementation using webgl and javascript
 
 Currently it supports most features, but many of them have bugs. 
 
-Check out the status:
+Canvas2D api examples:
 
 http://karellodewijk.github.io/canvas-webgl/test/canvas_tests1.html
 
@@ -11,9 +11,13 @@ http://karellodewijk.github.io/canvas-webgl/test/canvas_tests2.html
 
 http://karellodewijk.github.io/canvas-webgl/test/canvas_tests3.html
 
-And CanvasMark:
+Test suites:
 
 http://karellodewijk.github.io/canvas-webgl/CanvasMark/
+
+http://karellodewijk.github.io/canvas-webgl/test_suite/tests/index.html
+
+http://karellodewijk.github.io/canvas-webgl/perftest/
 
 Caveats:
 
