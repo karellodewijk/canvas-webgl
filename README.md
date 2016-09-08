@@ -18,7 +18,7 @@ http://karellodewijk.github.io/canvas-webgl/CanvasMark/
 Caveats:
 
 - Text rendering basically uses Canvas2D to render and then copies the result over to the webgl context, which is mostly an excercice in futility. But truly implementing text rendering in webgl would be a huge undertaking.
-- Webgl can not put images with width or height directly into a texture, so I use canvas2D to carve them up at a big performance hit.
+- Webgl can not put images with width or height larger than max texture size (typically 4096px) directly into a texture, so I use canvas2D to carve them up at a big performance hit.
 
 Missing features:
 
