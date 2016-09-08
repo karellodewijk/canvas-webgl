@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html >
+  <head>
+    <meta charset="UTF-8">
+    <title>Canvas 2D pixel rendering performance tests</title>
+        <link rel="stylesheet" href="css/style.css">
+  </head>
+
+  <body>
+
+    <h1>Canvas 2D pixel rendering performance tests</h1>
+<canvas style="display:none" id="main_canvas" width="1024" height="1024"></canvas>
+<p>Each render test is performed once on a hidden canvas with a size of 1024x1024 pixel.</p>
+<table>
+  <thead>
+    <tr>
+      <th>Method</th>
+      <th>avg. rendering time (ms)</th>
+      <th>~fps</th>
+      <th>&nbsp;</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>
+        <header>Random color fill with fillRect()</header>
+        <section>
+          <p>Fills the canvas with random colors computed during rendering using the contexts fillRect() method.</p>
+          <pre><code>
+function renderRandomFillRect( ctx, canvasDimension, params ){
+  for(var x = 0; x < canvasDimension.width; x++){
+    for(var y = 0; y < canvasDimension.width; y++){
+      ctx.fillStyle = toRGBAString( random(0,256), random(0,256), random(0,256), 1 );
+      ctx.fillRect( x, y, 1, 1);
+    }
+  }
+}
+          </code></pre>
+        </section>
+      </td>
+      <td id="result_rnd_fillRect_ms"> n/a </td>
+      <td id="result_rnd_fillRect_fps"> n/a </td>
+      <td><button id="calc_rnd_fillRect">Calculate</button></td>
+    </tr>
+    <tr>
+      <td>
+        <header>Random color fill with imagedata</header>
+        <section>
+          <p>Fills the canvas with random colors computed during rendering using the contexts putImageData() method.</p>
+          <pre><code>
+function renderRandomImageData( ctx, canvasDimension, params ){
+  var imageData = ctx.getImageData( 0, 0, canvasDimension.width, canvasDimension.height );
+  var rawData = imageData.data;
+  var totalPixels = canvasDimension.width * canvasDimension.height;
+  var index = 0;
+  for( var pixelIndex = 0; pixelIndex < totalPixels; pixelIndex++ ){
+    rawData[index++] = random( 0, 256 );
+    rawData[index++] = random( 0, 256 );
+    rawData[index++] = random( 0, 256 );
+    rawData[index++] = 256;
+  }
+  ctx.putImageData(imageData, 0, 0);
+}
+          </code></pre>
+        </section>
+      </td>
+      <td id="result_rnd_imagedata_ms"> n/a </td>
+      <td id="result_rnd_imagedata_fps"> n/a </td>
+      <td><button id="calc_rnd_imagedata">Calculate</button></td>
+    </tr>
+    <tr>
+      <td>
+        <header>Precomputed random color fill with fillRect()</header>
+        <section>
+          <pre><code>
+function renderPrecomputed2DFillRect( ctx, canvasDimension, params ){
+  for(var x = 0; x < canvasDimension.width; x++){
+    for(var y = 0; y < canvasDimension.height; y++){
+      ctx.fillStyle = toRGBAString( params[x][y].r, params[x][y].g, params[x][y].b, params[x][y].a );
+      ctx.fillRect( x, y, 1, 1);
+    }
+  }
+}
+          </code></pre>
+        </section>
+      </td>
+      <td id="result_precomp_rnd_fillRect_ms"> n/a </td>
+      <td id="result_precomp_rnd_fillRect_fps"> n/a </td>
+      <td><button id="calc_precomp_rnd_fillRect">Calculate</button></td>
+    </tr>
+    <tr>
+      <td>
+        <header>Precomputed random color fill with imagedata</header>
+        <section>
+          <pre><code>
+function renderPrecomputed2DImageData( ctx, canvasDimension, params ){
+  var imageData = ctx.getImageData( 0, 0, canvasDimension.width, canvasDimension.height );
+  var rawData = imageData.data;
+  var totalPixels = canvasDimension.width * canvasDimension.height;
+  var index = 0;
+  
+  for(var y = 0; y < canvasDimension.height; y++){
+    for(var x = 0; x < canvasDimension.width; x++){
+      rawData[index++] = params[x][y].r;
+      rawData[index++] = params[x][y].g;
+      rawData[index++] = params[x][y].b;
+      rawData[index++] = params[x][y].a;
+    }
+  }
+  ctx.putImageData(imageData, 0, 0);
+}
+          </code></pre>
+        </section>
+      </td>
+      <td id="result_precomp_rnd_imagedata_ms"> n/a </td>
+      <td id="result_precomp_rnd_imagedata_fps"> n/a </td>
+      <td><button id="calc_precomp_rnd_imagedata">Calculate</button></td>
+    </tr>
+    <tr>
+      <td>
+        <header>Precomputed seqential random color fill with fillRect()</header>
+        <section>
+          <pre><code>
+function renderPrecomputedSeqFillRect( ctx, canvasDimension, params ){
+  var index = 0;
+  for(var y = 0; y < canvasDimension.height; y++){
+    for(var x = 0; x < canvasDimension.width; x++){
+      ctx.fillStyle = toRGBAString( params[index++], params[index++], params[index++], params[index++] );
+      ctx.fillRect( x, y, 1, 1);
+    }
+  }
+}
+          </code></pre>
+        </section>
+      </td>
+      <td id="result_precomp_seq_rnd_fillRect_ms"> n/a </td>
+      <td id="result_precomp_seq_rnd_fillRect_fps"> n/a </td>
+      <td><button id="calc_precomp_seq_rnd_fillRect">Calculate</button></td>
+    </tr>
+    <tr>
+      <td>
+        <header>Precomputed sequential random color fill with imagedata</header>
+        <section>
+          <pre><code>
+function renderPrecomputedSeqImageData( ctx, canvasDimension, params ){
+  var imageData = ctx.getImageData( 0, 0, canvasDimension.width, canvasDimension.height );
+  imageData.data = params;
+  ctx.putImageData(imageData, 0, 0);
+}
+          </code></pre>
+        </section>
+      </td>
+      <td id="result_precomp_seq_rnd_imagedata_ms"> n/a </td>
+      <td id="result_precomp_seq_rnd_imagedata_fps"> n/a </td>
+      <td><button id="calc_precomp_seq_rnd_imagedata">Calculate</button></td>
+    </tr>
+  </tbody>
+</table>
+    <script src='http://cdnjs.cloudflare.com/ajax/libs/jquery/2.1.3/jquery.min.js'></script>
+		<script src="../canvas-webgl.js"></script>
+		<script src="../earcut.js"></script>  
+        <script src="js/index.js"></script>
+
+    
+    
+    
+  </body>
+</html>

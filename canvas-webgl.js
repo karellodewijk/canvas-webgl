@@ -1309,8 +1309,12 @@
 					}
 				}
 			} else {
-				//we can just use it directly
-				buffer = imagedata.data;
+				//we can just use it directly				
+				if (!(buffer instanceof Uint8Array)) {
+					buffer = new Uint8Array(imagedata.data);
+				} else {
+					buffer = imagedata.data;
+				}
 			}
 			
 			var program = this._select_program(this.direct_texture_program);
@@ -1651,6 +1655,8 @@
 			return program;
 		},
 		_draw_shadow(transform, draw_cb) {
+			if (this.shadowOffsetX == 0 && this.shadowOffsetX==0 && this.shadowBlur == 0) return;
+			
 			var gl = this.gl;
 			
 			var old_texture = gl.getParameter(gl.ACTIVE_TEXTURE);
@@ -1884,9 +1890,7 @@
 				program = this._select_program(this.simple_program);
 				gl.uniform4fv(program.colorLocation, this.fillStyleRGBA);
 			}
-
-			
-							
+				
 			var points = [x, y, x+width, y, x+width, y+height, x, y+height];	
 				
 			var _this = this;
@@ -1896,7 +1900,7 @@
 				_this._set_zindex();
 				gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
 			});
-
+			
 			var transform = matrixMultiply(this._transform, this.projectionMatrix);
 			gl.uniformMatrix4fv(program.transformLocation, false, transform);
 			gl.uniform1f(program.globalAlphaLocation, this.globalAlpha);
