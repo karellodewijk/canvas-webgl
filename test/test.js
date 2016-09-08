@@ -26,9 +26,10 @@ function do_test(test) {
 
 window.onload = function() {
 	do_test(function(ctx) {	
-		ctx.fillStyle = '#f00';
+		ctx.canvas.width = 100;
+		ctx.scale(0.1, 0.1);
+		ctx.canvas.width = 100;
+		ctx.fillStyle = '#0f0';
 		ctx.fillRect(0, 0, 100, 50);
-		ctx.drawImage(document.getElementById('ggrr-256x256.png'), 0, 178, 50, -100, 0, 0, 50, 100);
-		ctx.drawImage(document.getElementById('ggrr-256x256.png'), 0, 78, 50, 100, 50, 100, 50, -100);
 	});	
 }

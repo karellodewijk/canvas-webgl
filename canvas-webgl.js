@@ -1142,6 +1142,28 @@
 		gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 		gl.enable(gl.BLEND);
 
+		//TODO: this doesn't look pretty, does it
+		var _this = this;
+		var widthProp = Object.getOwnPropertyDescriptor(gl.canvas.__proto__, 'width');
+		var heightProp = Object.getOwnPropertyDescriptor(gl.canvas.__proto__, 'height');
+		Object.defineProperty(gl.canvas, "width", {
+			set: function myProperty(new_width) {
+				widthProp.set.call(gl.canvas, new_width);
+				_this._resize();
+			},
+			get: function() {
+				return widthProp.get.call(gl.canvas);
+			}
+		});
+		Object.defineProperty(gl.canvas, "height", {
+			set: function myProperty(new_height) {
+				heightProp.set.call(gl.canvas, new_height);
+				_this._resize();
+			},
+			get: function() {
+				return heightProp.get.call(gl.canvas);
+			}
+		});
 			
 	}	
 	
@@ -1174,6 +1196,8 @@
 							   0, 1, 0, 0,
 							   0, 0, 1, 0,
 							   0, 0, 0, 1];
+			this._savedWidth = this.width;
+			this._savedHeight = this.height;
 		},
 		setTransform(a, b, c, d, e, f) {
 			this._transform = [a,b,0,0,
@@ -1515,24 +1539,28 @@
 		get width() { return this.canvas.width; },
 		_resize() {
 			var gl = this.gl;
-			var displayWidth  = this.canvas.width;
-			var displayHeight = this.canvas.height;			
-			if (this.canvas.width != displayWidth || this.canvas.height != displayHeight) {
-				this.canvas.width  = displayWidth;
-				this.canvas.height = displayHeight;
-				gl.viewport(0, 0, this.canvas.width, this.canvas.height);				
-				gl.clear(gl.COLOR_BUFFER_BIT);
-				
-				//delete some buffers we may have lying around
-				delete this.clipFramebuffer;
-				delete this.clipTexture;
-				delete this.shadowFramebuffer;
-				delete this.shadowFramebuffer2;
-				delete this.shadowTexture;
-				delete this.shadowTexture2;
-				delete this.imageTexture;
-				delete this.cachedImage;
-			}
+			
+			gl.viewport(0,0,gl.canvas.width, gl.canvas.height);
+			
+			this.projectionMatrix = [ //flips y, shift scale from [width, height] to [-1, 1]
+				2/gl.canvas.width,  0,                   0, 0,
+				0,                  -2/gl.canvas.height, 0, 0,
+				0,                  0,                   1, 0,
+				-1,                 1,                   0, 1
+			];
+
+			this.resetTransform();
+			
+			//delete some buffers we may have lying around
+			delete this.clipFramebuffer;
+			delete this.clipTexture;
+			delete this.clipPlane;
+			delete this.shadowFramebuffer;
+			delete this.shadowFramebuffer2;
+			delete this.shadowTexture;
+			delete this.shadowTexture2;
+			delete this.imageTexture;
+			delete this.cachedImage;
 		},
 		createLinearGradient(x0, y0, x1, y1) {
 			return new LinearGradient(x0, y0, x1, y1);			
@@ -1826,7 +1854,6 @@
 				_path = path;
 			}
 			
-			this._resize();
 			var gl = this.gl;			
 			var program;
 			
@@ -1874,7 +1901,6 @@
 			}
 		},
 		fillRect(x, y, width, height) {
-			this._resize();
 			var gl = this.gl;			
 			var program;
 			
@@ -1897,7 +1923,7 @@
 				_this._set_zindex();
 				gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
 			});
-			
+
 			var transform = matrixMultiply(this._transform, this.projectionMatrix);
 			gl.uniformMatrix4fv(program.transformLocation, false, transform);
 			gl.uniform1f(program.globalAlphaLocation, this.globalAlpha);
@@ -2089,7 +2115,6 @@
 			return 	[triangle_buffer, to_draw_buffer];
 		},
 		__strokePath(array, closed) {
-			this._resize();
 			var gl = this.gl;
 			var use_linedash = this.lineDash.length > 0;
 
