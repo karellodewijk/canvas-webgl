@@ -1,0 +1,38 @@
+/*tr.result.waiting,*/
+tr.result.pass,
+tr.result.fail
+{
+	display: none;
+}
+
+.showunfinished tr.result.waiting,
+.showall tr.result,
+tr.result.unknown
+{
+	display: table-row;
+	~display: block; /* for IE7 */
+}
+
+input.answer
+{
+	width: 100px;
+	height: 100px;
+	background: #ddd;
+	color: black;
+}
+
+input.answer.chosen
+{
+	background: #ffa;
+}
+
+iframe
+{
+	margin-left: 2em;
+	margin-right: 2em;
+}
+
+td.highlight
+{
+	background: magenta;
+}

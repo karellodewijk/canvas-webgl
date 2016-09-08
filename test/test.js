@@ -24,15 +24,11 @@ function do_test(test) {
 	document.body.appendChild(document.createElement('br'));
 }
 
-test_webgl
- 
 window.onload = function() {
 	do_test(function(ctx) {	
-	  for (var i = 0; i < 100; i++) {
-		  for (var j = 0; j < 100; j++) {
-			  ctx.fillStyle = "rgba(255,0,0,1)";
-			  ctx.fillRect( i, j, 1, 1);
-		  }
-	  }
+		ctx.fillStyle = '#f00';
+		ctx.fillRect(0, 0, 100, 50);
+		ctx.drawImage(document.getElementById('ggrr-256x256.png'), 0, 178, 50, -100, 0, 0, 50, 100);
+		ctx.drawImage(document.getElementById('ggrr-256x256.png'), 0, 78, 50, 100, 50, 100, 50, -100);
 	});	
 }
