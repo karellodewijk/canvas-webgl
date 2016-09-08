@@ -13,5 +13,5 @@ http://karellodewijk.github.io/canvas-webgl/test/canvas_tests3.html
 
 And CanvasMark:
 
-http://karellodewijk.github.io/canvas_webgl/CanvasMark/
+http://karellodewijk.github.io/canvas-webgl/CanvasMark/
 
