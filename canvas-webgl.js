@@ -13,6 +13,7 @@
 		uniform vec4 u_shadow_color;
 		uniform vec2 u_direction;
 		uniform float u_gauss_coeff[100]; //we will rarely send 100 coeff
+		uniform float u_global_alpha;
 		 
 		varying vec2 v_texcoord;
 
@@ -35,7 +36,7 @@
 			    color += texture2D(texture, v_texcoord + float(i) * u_direction) * u_gauss_coeff[i];
 			    color += texture2D(texture, v_texcoord - float(i) * u_direction) * u_gauss_coeff[i];
 		    }  
-			gl_FragColor = vec4(u_shadow_color.xyz, u_shadow_color.w * color.w);			
+			gl_FragColor = vec4(u_shadow_color.xyz, u_shadow_color.w * color.w * u_global_alpha);			
 		}
 	`
 	
@@ -74,6 +75,7 @@
 		varying vec2 v_texcoord;
 		 
 		uniform sampler2D texture;
+		uniform float u_global_alpha;
 		 
 		void main() {
 		   if (v_texcoord.x < 0.0 ||
@@ -83,6 +85,7 @@
 			 discard;
 		   }
 		   gl_FragColor = texture2D(texture, v_texcoord);
+		   gl_FragColor.w *= u_global_alpha;
 		}
 	`
 
@@ -102,11 +105,13 @@
 	var texture_draw_fragment_shader = `	
 		precision mediump float;
 		uniform sampler2D texture;
+		uniform float u_global_alpha;
 		
 		varying vec2 v_texcoord;
 		 
 		void main() {
 		   gl_FragColor = texture2D(texture, v_texcoord);
+		   gl_FragColor.w *= u_global_alpha;
 		}
 	`
 	
@@ -139,9 +144,11 @@
 		precision mediump float;
 
 		uniform vec4 u_color;
+		uniform float u_global_alpha;
 
 		void main() {
 		   gl_FragColor = u_color;
+		   gl_FragColor.w *= u_global_alpha;
 		}
 	`
 
@@ -163,9 +170,12 @@
 		precision mediump float;
 
 		varying vec4 v_color;
+		
+		uniform float u_global_alpha;
 
 		void main() {
 		   gl_FragColor = v_color;
+		   gl_FragColor.w *= u_global_alpha;
 		}
 	`
 	
@@ -932,8 +942,6 @@
 		this.linedash_texture_program = create_program(linedash_texture_draw_vertex_shader, linedash_texture_draw_fragment_shader);
 		//Accepts texture and location positions and maps them
 		this.direct_texture_program = create_program(direct_texture_draw_vertex_shader, texture_draw_fragment_shader);	
-		
-
 
 		this.projectionMatrix = [ //flips y, shift scale from [width, height] to [-1, 1]
 			2/gl.canvas.width,  0,                   0, 0,
@@ -951,6 +959,8 @@
 		program.textureMatrixLocation = gl.getUniformLocation(program, "u_textureMatrix");
 		program.textureLocation = gl.getUniformLocation(program, "texture");
 		program.zindexLocation = gl.getUniformLocation(program, "u_zindex");
+		program.globalAlphaLocation = gl.getUniformLocation(program, "u_global_alpha");
+		gl.uniform1f(program.globalAlphaLocation, this.globalAlpha);
 		
 		program.positionLocation = gl.getAttribLocation(program, "a_position");
 		program.vertexBuffer = gl.createBuffer();
@@ -965,6 +975,8 @@
 		program.colorLocation = gl.getUniformLocation(program, "u_color");
 		gl.uniform4f(program.colorLocation, 0, 0, 0, 1);
 		program.zindexLocation = gl.getUniformLocation(program, "u_zindex");
+		program.globalAlphaLocation = gl.getUniformLocation(program, "u_global_alpha");
+		gl.uniform1f(program.globalAlphaLocation, this.globalAlpha);
 		
 		program.transformLocation = gl.getUniformLocation(program, "u_matrix");
 		gl.uniformMatrix4fv(program.transformLocation, false, this.projectionMatrix);
@@ -987,6 +999,8 @@
 		
 		program.textureLocation = gl.getUniformLocation(program, "texture");	
 		program.zindexLocation = gl.getUniformLocation(program, "u_zindex");		
+		program.globalAlphaLocation = gl.getUniformLocation(program, "u_global_alpha");
+		gl.uniform1f(program.globalAlphaLocation, this.globalAlpha);
 		program.transformLocation = gl.getUniformLocation(program, "u_matrix");
 		gl.uniformMatrix4fv(program.transformLocation, false, this.projectionMatrix);
 		
@@ -1007,6 +1021,8 @@
 		gl.useProgram(this.gradient_program);
 		
 		program.zindexLocation = gl.getUniformLocation(program, "u_zindex");
+		program.globalAlphaLocation = gl.getUniformLocation(program, "u_global_alpha");
+		gl.uniform1f(program.globalAlphaLocation, this.globalAlpha);
 		program.transformLocation = gl.getUniformLocation(program, "u_matrix");
 		gl.uniformMatrix4fv(program.transformLocation, false, this.projectionMatrix);
 
@@ -1029,7 +1045,8 @@
 		program.colorLocation = gl.getUniformLocation(program, "u_color");
 		gl.uniform4f(program.colorLocation, 0, 0, 0, 1);
 		program.zindexLocation = gl.getUniformLocation(program, "u_zindex");
-		
+		program.globalAlphaLocation = gl.getUniformLocation(program, "u_global_alpha");
+		gl.uniform1f(program.globalAlphaLocation, this.globalAlpha);		
 		program.transformLocation = gl.getUniformLocation(program, "u_matrix");
 		gl.uniformMatrix4fv(program.transformLocation, false, this.projectionMatrix);
 
@@ -1044,6 +1061,8 @@
 		gl.useProgram(this.circle_program);
 		
 		program.zindexLocation = gl.getUniformLocation(program, "u_zindex");
+		program.globalAlphaLocation = gl.getUniformLocation(program, "u_global_alpha");
+		gl.uniform1f(program.globalAlphaLocation, this.globalAlpha);
 		program.transformLocation = gl.getUniformLocation(program, "u_matrix");
 		gl.uniformMatrix4fv(program.transformLocation, false, this.projectionMatrix);
 
@@ -1063,6 +1082,8 @@
 		gl.useProgram(this.texture_program);
 		
 		program.zindexLocation = gl.getUniformLocation(program, "u_zindex");
+		program.globalAlphaLocation = gl.getUniformLocation(program, "u_global_alpha");
+		gl.uniform1f(program.globalAlphaLocation, this.globalAlpha);
 		program.transformLocation = gl.getUniformLocation(program, "u_matrix");
 		gl.uniformMatrix4fv(program.transformLocation, false, this.projectionMatrix);
 		program.textureLocation = gl.getUniformLocation(program, "texture");
@@ -1078,6 +1099,8 @@
 		gl.useProgram(this.direct_texture_program);
 		
 		program.zindexLocation = gl.getUniformLocation(program, "u_zindex");
+		program.globalAlphaLocation = gl.getUniformLocation(program, "u_global_alpha");
+		gl.uniform1f(program.globalAlphaLocation, this.globalAlpha);
 		program.transformLocation = gl.getUniformLocation(program, "u_matrix");
 		gl.uniformMatrix4fv(program.transformLocation, false, this.projectionMatrix);
 		program.textureLocation = gl.getUniformLocation(program, "texture");
@@ -1104,6 +1127,8 @@
 		program.gaussCoeffLocation = gl.getUniformLocation(program, "u_gauss_coeff");
 		program.shadowColorLocation = gl.getUniformLocation(program, "u_shadow_color");
 		program.zindexLocation = gl.getUniformLocation(program, "u_zindex");
+		program.globalAlphaLocation = gl.getUniformLocation(program, "u_global_alpha");
+		gl.uniform1f(program.globalAlphaLocation, this.globalAlpha);
 		program.offsetLocation = gl.getUniformLocation(program, "u_offset");
 
 		program.positionLocation = gl.getAttribLocation(program, "a_position");
@@ -1299,6 +1324,8 @@
 			
 			var transform = matrixMultiply(this._transform, this.projectionMatrix);
 			gl.uniformMatrix4fv(program.transformLocation, false, transform);
+			gl.uniform1f(program.globalAlphaLocation, this.globalAlpha);
+			this._set_zindex();
 			
 			this.__prepare_clip();
 			gl.bindBuffer(gl.ARRAY_BUFFER, program.textureCoordsBuffer);
@@ -1307,7 +1334,6 @@
 			gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);
 			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([dx+x, dy+y, dx+x+w, dy+y, dx+x+w, dy+y+h, dx+x, dy+y+h]), gl.STATIC_DRAW);
 			gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);	
-			this._set_zindex();
 			gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
 			this.__execute_clip();
 		},
@@ -1845,13 +1871,13 @@
 
 				var transform = matrixMultiply(this._transform, this.projectionMatrix);
 				gl.uniformMatrix4fv(program.transformLocation, false, transform);
+				this._set_zindex();
+				gl.uniform1f(program.globalAlphaLocation, this.globalAlpha);
 				
 				this.__prepare_clip();
 				gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);
 				gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW);
 				gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);	
-				this._set_zindex();
-				
 				gl.drawArrays(gl.TRIANGLES, 0, data.length/2);
 				this.__execute_clip()
 			}
@@ -1885,12 +1911,13 @@
 
 			var transform = matrixMultiply(this._transform, this.projectionMatrix);
 			gl.uniformMatrix4fv(program.transformLocation, false, transform);
+			gl.uniform1f(program.globalAlphaLocation, this.globalAlpha);
+			this._set_zindex();
 			
 			this.__prepare_clip();
 			gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);
 			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(points), gl.STATIC_DRAW);
 			gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);	
-			this._set_zindex();
 			gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
 			this.__execute_clip();
 		},
@@ -2172,6 +2199,8 @@
 			
 			var transform = matrixMultiply(this._transform, this.projectionMatrix);
 			gl.uniformMatrix4fv(program.transformLocation, false, transform);
+			gl.uniform1f(program.globalAlphaLocation, this.globalAlpha);
+			this._set_zindex();
 			
 			this.__prepare_clip();
 			if (use_linedash) {
@@ -2182,8 +2211,6 @@
 			gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);
 			gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);	
 			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(triangle_buffer), gl.STATIC_DRAW);
-						
-			this._set_zindex();
 			gl.drawArrays(gl.TRIANGLE_STRIP, 0, len);
 			this.__execute_clip();
 		},

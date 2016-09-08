@@ -104,5 +104,14 @@ window.onload = function() {
 
 		ctx.restore(); // restore to the default state
 		ctx.fillRect(150, 75, 100, 100);
+	});	
+	do_test(function(ctx) {		
+		ctx.globalAlpha = 0.5;
+
+		ctx.fillStyle = "blue";
+		ctx.fillRect(10, 10, 100, 100);
+
+		ctx.fillStyle = "red";
+		ctx.fillRect(50, 50, 100, 100);
 	});		
 }
