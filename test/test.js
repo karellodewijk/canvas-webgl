@@ -26,10 +26,15 @@ function do_test(test) {
 
 window.onload = function() {
 	do_test(function(ctx) {	
-		ctx.canvas.width = 100;
-		ctx.scale(0.1, 0.1);
-		ctx.canvas.width = 100;
-		ctx.fillStyle = '#0f0';
-		ctx.fillRect(0, 0, 100, 50);
+		// (These values are chosen to survive relatively alright through being premultiplied)
+		ctx.fillStyle = 'rgba(1, 3, 254, 1)';
+		ctx.fillRect(0, 0, 25, 25);
+		ctx.fillStyle = 'rgba(8, 252, 248, 0.75)';
+		ctx.fillRect(25, 0, 25, 25);
+		ctx.fillStyle = 'rgba(6, 10, 250, 0.502)';
+		ctx.fillRect(50, 0, 25, 25);
+		ctx.fillStyle = 'rgba(12, 16, 244, 0.25)';
+		ctx.fillRect(75, 0, 25, 25);
+
 	});	
 }
