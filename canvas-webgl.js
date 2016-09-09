@@ -718,6 +718,7 @@
 	
 	var Path2D = function() {
 		this.paths = [[]];
+		this.closed = [false];
 	}
 	
 	Path2D.prototype = {
@@ -733,8 +734,14 @@
 		closePath() {
 			if (this.paths.length > 0) {
 				var currentPath = this.paths[this.paths.length-1];
-				if (currentPath.length > 2 && (currentPath[currentPath.length-2] != currentPath [0] || currentPath[currentPath.length-1] != currentPath[1]))
-					currentPath.push(currentPath[0], currentPath[1]);
+				if (currentPath.length >= 2) {
+					if (currentPath[currentPath.length-2] != currentPath[0] || currentPath[currentPath.length-1] != currentPath[1]) {
+						currentPath.push(currentPath[0], currentPath[1]);
+					}
+					this.closed[this.paths[this.paths.length-1]] = true;
+					this.paths.push([currentPath[0], currentPath[1]]);
+					this.closed.push(false);
+				}		
 			}
 		},
 		moveTo(x,y) {
@@ -801,7 +808,7 @@
 			var nr_of_interpolation_points = length / ARC_RESOLUTION;		
 			var dangle = diff / nr_of_interpolation_points;
 
-			var angle = startAngle;
+			var angle = endAngle;
 			
 			var cos_rotation = Math.cos(rotation);
 			var sin_rotation = Math.sin(rotation);
@@ -811,7 +818,7 @@
 				var x2 = x + x1 * cos_rotation - y1 * sin_rotation;
 				var y2 = y + x1 * sin_rotation + y1 * cos_rotation;		
 				currentPath.push(x2, y2);
-				angle += dangle;
+				angle -= dangle;
 			}			
 		},
 		arc(x, y, radius, startAngle, endAngle, anticlockwise) {
@@ -820,21 +827,21 @@
 				startAngle = endAngle;
 				endAngle = temp;
 			}
-			
+								
 			var currentPath = this.paths[this.paths.length-1];
 			if (startAngle > endAngle) { 
 				endAngle += 2 * Math.PI;
 			}
 			
 			var diff = endAngle - startAngle;
-			var length = diff * radius; 			
+			var length = Math.abs(diff) * radius; 			
 			var nr_of_interpolation_points = length / ARC_RESOLUTION;		
 			var dangle = diff / nr_of_interpolation_points;
 
-			var angle = startAngle;
+			var angle = endAngle;
 			for (var j = 0; j < nr_of_interpolation_points+1; j++) {
 				currentPath.push(x + radius * Math.cos(angle), y + radius * Math.sin(angle));
-				angle += dangle;
+				angle -= dangle;
 			}
 		},
 		arcTo(x1, y1, x2, y2, radius) {
@@ -875,8 +882,8 @@
 			currentPath.push(tangent_point2[0], tangent_point2[1])		
 		},
 		rect(x, y, width, height) {
-			var currentPath = this.paths[this.paths.length-1];
-			currentPath.push(x,y,x+width,y,x+width,y+height,x,y+height,x,y);
+			this.paths.push([x, y, x+width, y, x+width, y+height, x, y+height], [x, y]);
+			this.closed.push(true, false);
 		},
 	}
 	
@@ -1420,10 +1427,10 @@
 			var _path = this.path;
 			if(path) {  
 				_path = path;
-			}
+			}	
 			for (var i in _path.paths) {
 				var currentPath = _path.paths[i];
-				this.__strokePath(this.path.paths[i], currentPath[0] == currentPath[currentPath.length-2] && currentPath[1] == currentPath[currentPath.length-1]);
+				this.__strokePath(this.path.paths[i], _path.closed[i]);
 			}
 		},
 		clip(path) {
@@ -1880,7 +1887,16 @@
 			
 			for (var i in _path.paths) {
 				var currentPath = _path.paths[i];
+				var closed = currentPath[0] == currentPath[currentPath.length-2] && currentPath[1] == currentPath[currentPath.length-1];			
+				if (!closed) {
+					currentPath.push(currentPath[0],  currentPath[1]);
+				}
 				var triangles = earcut(currentPath);
+				if (!closed) {
+					currentPath.pop();
+					currentPath.pop();
+				}
+				
 				var data = []
 				
 				for (var i = 0; i < triangles.length; i+=3) {
@@ -1978,7 +1994,6 @@
 			
 			var previous_triangle_buffer_length = 0;
 			
-			var last_point;
 			if (!closed) {
 				var line = [array[2] - array[0], array[3] - array[1]]
 				var l = Math.sqrt(Math.pow(line[0],2) + Math.pow(line[1],2))
@@ -2009,6 +2024,8 @@
 					}
 					previous_triangle_buffer_length = triangle_buffer.length;
 				}	
+			} else {
+				array.push(array[2], array[3]);
 			}
 			
 			
@@ -2045,7 +2062,7 @@
 					//miter
 					triangle_buffer.push(a[0], a[1], b[0], b[1]);
 				} else {
-					var sin_angle = p1minp0[1] * p2minp1[0] - p1minp0[0] * p2minp1[0];
+					var sin_angle = p1minp0[1] * p2minp1[0] - p1minp0[0] * p2minp1[1];
 					
 					if (this.lineJoin == 'round') {
 						//round
@@ -2114,6 +2131,8 @@
 				}
 			} else {
 				triangle_buffer.push(triangle_buffer[0], triangle_buffer[1], triangle_buffer[2], triangle_buffer[3])
+				array.pop();
+				array.pop();
 			}
 
 			if (use_linedash) {
