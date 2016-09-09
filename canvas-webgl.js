@@ -1147,7 +1147,8 @@
 		//init some other random webgl stuff
 		gl.enable(gl.DEPTH_TEST);
 		gl.depthFunc(gl.LEQUAL);
-		gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+		gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+		
 		gl.enable(gl.BLEND);
 
 		//TODO: this doesn't look pretty, does it
@@ -1909,12 +1910,12 @@
 				
 				var _this = this;
 				
-				this._draw_shadow(this._transform, this.currentzIndex, function() {	
+				this._draw_shadow(this._transform, this.currentZIndex, function() {	
 					gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);				
 					gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW);
 					gl.drawArrays(gl.TRIANGLES, 0, data.length/2);
 				});
-				this.currentzIndex -=EPSILON;
+				this.currentZIndex -=EPSILON;
 
 				var transform = matrixMultiply(this._transform, this.projectionMatrix);
 				gl.uniformMatrix4fv(program.transformLocation, false, transform);
@@ -1944,14 +1945,14 @@
 			}
 				
 			var points = [x, y, x+width, y, x+width, y+height, x, y+height];	
-				
+			
 			var _this = this;
-			this._draw_shadow(this._transform, this.currentzIndex, function() {	
+			this._draw_shadow(this._transform, this.currentZIndex, function() {	
 				gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);				
 				gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(points), gl.STATIC_DRAW);
 				gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
 			});
-			this.currentzIndex -=EPSILON;
+			this.currentZIndex -= EPSILON;
 
 			var transform = matrixMultiply(this._transform, this.projectionMatrix);
 			
@@ -2227,7 +2228,7 @@
 			}
 						
 			var _this = this;
-			this._draw_shadow(this._transform, this.currentzIndex, function() {
+			this._draw_shadow(this._transform, this.currentZIndex, function() {
 				if (use_linedash) {
 					gl.bindBuffer(gl.ARRAY_BUFFER, program.toDrawBuffer);
 					gl.vertexAttribPointer(program.toDrawLocation, 1, gl.FLOAT, false, 0, 0);	
@@ -2238,7 +2239,7 @@
 				gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(triangle_buffer), gl.STATIC_DRAW);
 				gl.drawArrays(gl.TRIANGLE_STRIP, 0, len);
 			});
-			this.currentzIndex -= EPSILON;
+			this.currentZIndex -= EPSILON;
 			
 			var transform = matrixMultiply(this._transform, this.projectionMatrix);
 			gl.uniformMatrix4fv(program.transformLocation, false, transform);
@@ -2418,7 +2419,7 @@
 				if (img.width <= 4096 && img.height <= 4096) {	
 					gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
 				} else {
-					//console.warn("Texture too large >4096px. using canvas fallback.");
+					console.warn("Texture too large >4096px. using canvas fallback.");
 					var canvas = document.createElement('canvas');
 					canvas.width = srcWidth;
 					canvas.height = srcHeight;
@@ -2484,7 +2485,7 @@
 	HTMLCanvasElement.prototype.getContext = function(id) {	
 		if (id == 'webgl-2d') {
 			if (!this.__context2d) {
-				this.__context2d = new CanvasRenderingContext2D(orig_getContext.apply(this, ['webgl', {preserveDrawingBuffer: true, premultipliedAlpha:false}]));
+				this.__context2d = new CanvasRenderingContext2D(orig_getContext.apply(this, ['webgl', {preserveDrawingBuffer: true}]));
 			}
 			return this.__context2d;
 		} else {
