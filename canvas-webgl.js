@@ -1179,11 +1179,11 @@
 		_set_defaults() {
 			this.globalAlpha = 1;
 			this.globalCompositeOperation = "source-over";	
-			this.strokeStyle = "#000000";
+			this.strokeStyle = "#000";
 			this.strokeStyleRGBA = [0,0,0,1];	
-			this.fillStyle = "#000000";
+			this.fillStyle = "#000";
 			this.fillStyleRGBA = [0,0,0,1];
-			this.shadowColor = "rgba(0, 0, 0, 0)";
+			this.shadowColor = "rgba(0, 0, 0, 0.0)";
 			this.shadowColorRGBA = [0,0,0,0];
 			this.shadowOffsetX = 0;
 			this.shadowOffsetY = 0;
@@ -1859,6 +1859,7 @@
 			gl.bindTexture(gl.TEXTURE_2D, this.shadowTexture2);
 			gl.uniform1i(program.textureLocation, 1);
 						
+			this._set_zindex();					
 			gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
 			
 			this._select_program(old_program);	
