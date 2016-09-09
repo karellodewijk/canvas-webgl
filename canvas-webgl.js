@@ -1697,7 +1697,7 @@
 			}
 			return program;
 		},
-		_draw_shadow(transform, draw_cb) {
+		_draw_shadow(transform, z_index, draw_cb) {
 			if (this.shadowOffsetX == 0 && this.shadowOffsetX==0 && this.shadowBlur == 0) return;
 			
 			var gl = this.gl;
@@ -1859,7 +1859,8 @@
 			gl.bindTexture(gl.TEXTURE_2D, this.shadowTexture2);
 			gl.uniform1i(program.textureLocation, 1);
 						
-			this._set_zindex();					
+			gl.uniform1f(program.zindexLocation, z_index);	
+			this.currentZIndex -= EPSILON;
 			gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
 			
 			this._select_program(old_program);	
@@ -1908,12 +1909,12 @@
 				
 				var _this = this;
 				
-				this._draw_shadow(this._transform, function() {	
+				this._draw_shadow(this._transform, this.currentzIndex, function() {	
 					gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);				
 					gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW);
-					_this._set_zindex();
 					gl.drawArrays(gl.TRIANGLES, 0, data.length/2);
 				});
+				this.currentzIndex -=EPSILON;
 
 				var transform = matrixMultiply(this._transform, this.projectionMatrix);
 				gl.uniformMatrix4fv(program.transformLocation, false, transform);
@@ -1945,12 +1946,12 @@
 			var points = [x, y, x+width, y, x+width, y+height, x, y+height];	
 				
 			var _this = this;
-			this._draw_shadow(this._transform, function() {	
+			this._draw_shadow(this._transform, this.currentzIndex, function() {	
 				gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);				
 				gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(points), gl.STATIC_DRAW);
-				_this._set_zindex();
 				gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
 			});
+			this.currentzIndex -=EPSILON;
 
 			var transform = matrixMultiply(this._transform, this.projectionMatrix);
 			
@@ -2226,7 +2227,7 @@
 			}
 						
 			var _this = this;
-			this._draw_shadow(this._transform, function() {
+			this._draw_shadow(this._transform, this.currentzIndex, function() {
 				if (use_linedash) {
 					gl.bindBuffer(gl.ARRAY_BUFFER, program.toDrawBuffer);
 					gl.vertexAttribPointer(program.toDrawLocation, 1, gl.FLOAT, false, 0, 0);	
@@ -2235,10 +2236,9 @@
 				gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);
 				gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);	
 				gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(triangle_buffer), gl.STATIC_DRAW);
-				
-				_this._set_zindex();
 				gl.drawArrays(gl.TRIANGLE_STRIP, 0, len);
 			});
+			this.currentzIndex -= EPSILON;
 			
 			var transform = matrixMultiply(this._transform, this.projectionMatrix);
 			gl.uniformMatrix4fv(program.transformLocation, false, transform);
@@ -2374,7 +2374,7 @@
 			//we take z-index now as we're supposed to draw now
 			this.currentZIndex-=EPSILON;
 			var temp_z_index = this.currentZIndex; 			
-			this.currentZIndex-=2*EPSILON;
+			this.currentZIndex-=5*EPSILON;
 			
 			var _this = this;
 			var image_loaded = function() {
@@ -2451,12 +2451,12 @@
 				//var points = [0, 0, 1, 0, 1, 1, 0, 1]
 				var points = [0, 0, 1, 0, 1, 1, 0, 1]
 				
-				_this._draw_shadow(matrix, function() {	
+				_this._draw_shadow(matrix, temp_z_index, function() {	
 					gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);				
 					gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(points), gl.STATIC_DRAW);
-					gl.uniform1f(program.zindexLocation, temp_z_index);
 					gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
 				});
+				temp_z_index -= EPSILON;
 
 				matrix = matrixMultiply(matrix, _this.projectionMatrix);
 				gl.uniformMatrix4fv(program.transformLocation, false, matrix);
@@ -2467,7 +2467,7 @@
 				gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);	
 				gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(points), gl.STATIC_DRAW);
 				
-				gl.uniform1f(program.zindexLocation, temp_z_index-EPSILON);				
+				gl.uniform1f(program.zindexLocation, temp_z_index);
 				gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);		
 				_this.__execute_clip();
 			}
