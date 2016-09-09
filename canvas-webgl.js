@@ -1251,9 +1251,9 @@
 								 this._transform[5], this._transform[12], this._transform[13]);
 		},
 		save() {
-			var saveState = {_transform:this._transform, clipPlane:this.clipPlane, strokeStyle:this.strokeStyle, fillStyle:this.fillStyle, globalAlpha:this.globalAlpha, lineWidth:this.lineWidth,
+			var saveState = {_transform:this._transform, clipPlane:this.clipPlane, strokeStyleRGBA:this.strokeStyleRGBA, fillStyleRGBA:this.fillStyleRGBA, _strokeStyle:this._strokeStyle, _fillStyle:this._fillStyle, globalAlpha:this.globalAlpha, lineWidth:this.lineWidth,
 							  lineCap:this.lineCap, lineJoin:this.lineJoin, miterLimit:this.miterLimit,lineDashOffset:this.lineDashOffset, shadowOffsetX:this.shadowOffsetX, 
-							  shadowOffsetY:this.shadowOffsetY, shadowBlur:this.shadowBlur, shadowColor:this.shadowColor, filter:this.filter, globalCompositeOperation:this.globalCompositeOperation, 
+							  shadowOffsetY:this.shadowOffsetY, shadowBlur:this.shadowBlur, _shadowColorRGBA:this._shadowColorRGBA, _shadowColor:this._shadowColor, filter:this.filter, globalCompositeOperation:this.globalCompositeOperation, 
 							  font:this.font, textAlign:this.textAlign, textBaseline:this.textBaseline, direction:this.direction, imageSmoothingEnabled:this.imageSmoothingEnabled,
 							  imageSmoothingQuality:this.imageSmoothingQuality, lineDash:this.lineDash};
 			if (this.saveStack) {
@@ -1267,8 +1267,10 @@
 			var s = this.saveStack.pop();
 			this._transform = s._transform;
 			this.clipPlane = s.clipPlane;
-			this.strokeStyle = s.strokeStyle;
-			this.fillStyle = s.fillStyle;
+			this.strokeStyleRGBA = s.strokeStyleRGBA;
+			this.fillStyleRGBA = s.fillStyleRGBA;
+			this._strokeStyle = s._strokeStyle;
+			this._fillStyle = s._fillStyle;
 			this.globalAlpha = s.globalAlpha;
 			this.lineWidth = s.lineWidth;
 			this.lineCap = s.lineCap;
@@ -1277,7 +1279,8 @@
 			this.lineDashOffset = s.lineDashOffset;
 			this.shadowOffsetX = s.shadowOffsetX;
 			this.shadowOffsetY = s.shadowOffsetY;
-			this.shadowColor = s.shadowColor;
+			this._shadowColor = s._shadowColor;
+			this._shadowColorRGBA = s._shadowColorRGBA;
 			this.shadowBlur = s.shadowBlur;
 			this.filter = s.filter;
 			this.globalCompositeOperation = s.globalCompositeOperation;
@@ -1288,6 +1291,7 @@
 			this.imageSmoothingEnabled = s.imageSmoothingEnabled;
 			this.imageSmoothingQuality = s.imageSmoothingQuality;
 			this.lineDash = s.lineDash;
+			
 		},
 		getImageData(sx, sy, sw, sh) {
 			var gl = this.gl;
@@ -1567,6 +1571,7 @@
 			delete this.shadowTexture2;
 			delete this.imageTexture;
 			delete this.cachedImage;
+			delete this.textRenderCanvas;
 		},
 		createLinearGradient(x0, y0, x1, y1) {
 			return new LinearGradient(x0, y0, x1, y1);			
@@ -2246,26 +2251,32 @@
 			// text rendering in webgl is somewhat beyond the scope of this project/
 			// Text will probably never look good rendered this way anyway.
 			var _ctx = _canvas.getContext("2d");
+			_ctx.clearRect(0, 0, _canvas.width, _canvas.height);
 			
-			_ctx.font = this.font;
-			_ctx.strokeStyle = this.strokeStyle;
-			_ctx.fillStyle = this.fillStyle;
-			_ctx.lineWidth = this.lineWidth;
-			_ctx.direction = this.direction;
-			_ctx.textBaseline = this.textBaseline;
-			
+			if (_ctx.font != this.font) _ctx.font = this.font;
+			if (_ctx.strokeStyle != this.strokeStyle) _ctx.strokeStyle = this.strokeStyle;
+			if (_ctx.fillStyle != this.fillStyle) _ctx.fillStyle = this.fillStyle;
+			if (_ctx.lineWidth != this.lineWidth) _ctx.lineWidth = this.lineWidth;
+			if (_ctx.direction != this.direction) _ctx.direction = this.direction;
+			if (_ctx.textBaseline != this.textBaseline) _ctx.textBaseline = this.textBaseline;
+			if (_ctx.globalAlpha != this.globalAlpha) _ctx.globalAlpha = this.globalAlpha;
 									
 			// _ctx.textBaseline = this.textBaseline;
 			var dim = _ctx.measureText(msg);
 			
 			var height = parseFloat(this.font);
-			_canvas.height = height * 2;	
+			height = height * 2;
 			
+			var width;
 			if (maxlen)	{
-				_canvas.width = Math.min(dim.width, maxlen);
+				width = Math.min(dim.width, maxlen);
 			} else {
-				_canvas.width = dim.width;
+				width = dim.width;
 			}
+			
+			/*
+			_canvas.height = height;
+			_canvas.width = width;
 			
 			//changing canvas size resets everything, so here we go again
 			_ctx.font = this.font;
@@ -2274,43 +2285,52 @@
 			_ctx.lineWidth = this.lineWidth;
 			_ctx.direction = this.direction;
 			_ctx.textBaseline = this.textBaseline;	
-			_ctx.imageSmoothingEnabled = false;	
 			_ctx.globalAlpha = this.globalAlpha;
-				
-			return _ctx;
+			*/
+			
+			return [_ctx, width, height];
 		},
 		strokeText(msg, x, y, maxlen) {
-			var _canvas = document.createElement("canvas");
-			var _ctx = this._prepareCanvas(_canvas, msg, maxlen);
+			if (!this.textRenderCanvas) {
+				this.textRenderCanvas = document.createElement("canvas");
+				this.textRenderCanvas.width = this.width;
+				this.textRenderCanvas.height = this.height;
+			}
+			var _canvas = this.textRenderCanvas;
 			
-			_ctx.strokeText(msg, 0, _canvas.height/2, maxlen);
+			var _ctx, width, height;
+			[_ctx, width, height] = this._prepareCanvas(_canvas, msg, maxlen);
+			
+			_ctx.strokeText(msg, 0, height/2, maxlen);
 
-			var image = new Image();
-			image.src = _canvas.toDataURL("image/svg");
-				
 			if (this.textAlign == "left" || this.textAlign == "start") {
-				this.drawImage(image, 0, 0, _canvas.width, _canvas.height, x, y-_canvas.height/2);
+				this.drawImage(_canvas, 0, 0, width, height, x, y-height/2, width, height);
 			} else if (this.textAlign == "right" || this.textAlign == "end") {
-				this.drawImage(image, 0, 0, _canvas.width, _canvas.height, x - _canvas.width, y-_canvas.height/2);
+				this.drawImage(_canvas, 0, 0, width, height, x - width, y-height/2, width, height);
 			} else if (this.textAlign == "center") {
-				this.drawImage(image, 0, 0, _canvas.width, _canvas.height, x - _canvas.width/2, y-_canvas.height/2);
+				this.drawImage(_canvas, 0, 0, width, height, x - width/2, y-height/2, width, height);
 			}
 		},
-		fillText(msg, x, y, maxlen) {			
-			var _canvas = document.createElement("canvas");
+		fillText(msg, x, y, maxlen) {
+			if (!this.textRenderCanvas) {
+				this.textRenderCanvas = document.createElement("canvas");
+				this.textRenderCanvas.width = this.width;
+				this.textRenderCanvas.height = this.height;
+			}
+			var _canvas = this.textRenderCanvas;
 			var _ctx = this._prepareCanvas(_canvas, msg, maxlen);
 			
-			_ctx.fillText(msg, 0, _canvas.height/2, maxlen);
+			var _ctx, width, height;
+			[_ctx, width, height] = this._prepareCanvas(_canvas, msg, maxlen);
 			
-			var image = new Image();
-			image.src = _canvas.toDataURL("image/svg");
-						
+			_ctx.fillText(msg, 0, height/2, maxlen);
+				
 			if (this.textAlign == "left" || this.textAlign == "start") {
-				this.drawImage(image, 0, 0, _canvas.width, _canvas.height, x, y-_canvas.height/2);
+				this.drawImage(_canvas, 0, 0, width, height, x, y-height/2, width, height);
 			} else if (this.textAlign == "right" || this.textAlign == "end") {
-				this.drawImage(image, 0, 0, _canvas.width, _canvas.height, x - _canvas.width, y-_canvas.height/2);
+				this.drawImage(_canvas, 0, 0, width, height, x - width, y-height/2, width, height);
 			} else if (this.textAlign == "center") {
-				this.drawImage(image, 0, 0, _canvas.width, _canvas.height, x - _canvas.width/2, y-_canvas.height/2);
+				this.drawImage(_canvas, 0, 0, width, height, x - width/2, y-height/2, width, height);
 			}
 		},
 		measureText(msg) {
@@ -2339,7 +2359,7 @@
 			var _this = this;
 			var image_loaded = function() {
 				var program = _this._select_program(_this.image_program);
-				
+
 				var img_width, img_height;
 				if (img instanceof HTMLImageElement) {
 					img_width = img.naturalWidth;
@@ -2347,7 +2367,7 @@
 				} else {
 					img_width = img.width;
 					img_height = img.height;					
-				}
+				}			
 				
 				if (dstX === undefined) {
 					dstX = srcX;
@@ -2375,20 +2395,17 @@
 				gl.activeTexture(gl.TEXTURE4);
 				gl.bindTexture(gl.TEXTURE_2D, _this.imageTexture);	
 				
-				if (img != _this.cachedImage) { 
-					if (img.width <= 4096 && img.height <= 4096) {	
-						gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
-						_this.cachedImage = img;
-					} else {
-						console.warn("Texture too large >4096px. using canvas fallback.");
-						var canvas = document.createElement('canvas');
-						canvas.width = srcWidth;
-						canvas.height = srcHeight;
-						var ctx = canvas.getContext('2d')
-						ctx.drawImage(img, srcX, srcY, srcWidth, srcHeight, 0, 0, srcWidth, srcHeight);
-						gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
-						srcX = 0; srcY=0; img_width=srcWidth; img_height=srcHeight;
-					}
+				if (img.width <= 4096 && img.height <= 4096) {	
+					gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+				} else {
+					//console.warn("Texture too large >4096px. using canvas fallback.");
+					var canvas = document.createElement('canvas');
+					canvas.width = srcWidth;
+					canvas.height = srcHeight;
+					var ctx = canvas.getContext('2d')
+					ctx.drawImage(img, srcX, srcY, srcWidth, srcHeight, 0, 0, srcWidth, srcHeight);
+					gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
+					srcX = 0; srcY=0; img_width=srcWidth; img_height=srcHeight;
 				}
 				
 				gl.uniform1i(program.textureLocation, 4);
@@ -2411,6 +2428,7 @@
 
 				var matrix = matrixMultiply(img_transform, _this._transform);							
 				
+				//var points = [0, 0, 1, 0, 1, 1, 0, 1]
 				var points = [0, 0, 1, 0, 1, 1, 0, 1]
 				
 				_this._draw_shadow(matrix, function() {	

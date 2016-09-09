@@ -163,6 +163,7 @@ window.onload = function() {
 		ctx.textBaseline = "hanging";
 		ctx.strokeText("Hello world", 0, 100);
 	});
+	
 	do_test(function(ctx) {	
 		ctx.font = "48px serif";
 		ctx.direction = "ltr";

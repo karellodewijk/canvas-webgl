@@ -25,12 +25,8 @@ function do_test(test) {
 }
 
 window.onload = function() {
-	do_test(function(ctx) {	
-		ctx.fillStyle = '#f00';
-		ctx.fillRect(0, 0, 100, 50);
-		var img = document.getElementById('green-1x1.png');
-		var pattern = ctx.createPattern(img, "");
-		ctx.fillStyle = pattern;
-		ctx.fillRect(0, 0, 200, 50);
-	});	
+	do_test(function(ctx) {
+		ctx.font = "48px serif";
+		ctx.fillText("Hello world", 50, 100);
+	});
 }
