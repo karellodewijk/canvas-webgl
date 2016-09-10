@@ -1,7 +1,7 @@
 "use strict";
 
 (function() {	
-	var EPSILON = 0.0000001; //mostly used for zindex increments
+	var EPSILON = 0.000001; //mostly used for zindex increments
 	var BEZIER_CURVE_RESOLUTION = 5; //space between interpolation points for quadratic and bezier curve approx. in pixels.
 	var ARC_RESOLUTION = 5;  //space between interpolation points for quadratic and bezier curve approx. in pixels. Also used for linejoins and linecaps
 	var SQRT_2 = Math.sqrt(2);
@@ -353,6 +353,11 @@
 				  m[1*4 + 0] * v[0] + m[1*4 + 1] * v[1] + m[1*4 + 2] * v[2] + m[1*4 + 3] * v[3],
 				  m[2*4 + 0] * v[0] + m[2*4 + 1] * v[1] + m[2*4 + 2] * v[2] + m[2*4 + 3] * v[3],
 				  m[3*4 + 0] * v[0] + m[3*4 + 1] * v[1] + m[3*4 + 2] * v[2] + m[3*4 + 3] * v[3] ];
+	}
+	
+	function vectTransform(m, v) {
+		return  [m[0] * v[0] + m[1] * v[1] + m[12],
+				 m[4] * v[0] + m[5] * v[1] + m[13]];
 	}
 
 	function _add_arc(triangle_buffer, x, y, radius, startAngle, endAngle, anticlockwise) {
@@ -1001,7 +1006,7 @@
 		this.projectionMatrix = [ //flips y, shift scale from [width, height] to [-1, 1]
 			2/gl.canvas.width,  0,                   0, 0,
 			0,                  -2/gl.canvas.height, 0, 0,
-			0,                  0,                   1, 0,
+			0,                  0,                   2, 0,
 			-1,                 1,                   0, 1
 	    ];
 		
@@ -1204,9 +1209,9 @@
 		
 		//init some other random webgl stuff
 		gl.enable(gl.DEPTH_TEST);
-		gl.depthFunc(gl.LEQUAL);
+		gl.depthFunc(gl.LESS);
 		
-		gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);	
+		gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 		gl.enable(gl.BLEND);
 
 		//TODO: this doesn't look pretty, does it
@@ -1502,22 +1507,31 @@
 			if (!this.clipPlane) {
 				this.clipPlane = [];
 			}
+			
 			for (var i in _path.paths) {		
-				var currentPath = _path.paths[i];					
-				var closed = currentPath[0] == currentPath[currentPath.length-2] && currentPath[1] == currentPath[currentPath.length-1];			
-				if (!closed) {
-					currentPath.push(currentPath[0],  currentPath[1]);
-				}			
-				var triangles = earcut(currentPath);
-				for (var i = 0; i < triangles.length; i+=3) {
-					this.clipPlane.push(currentPath[triangles[i]*2], currentPath[triangles[i]*2+1]);
-					this.clipPlane.push(currentPath[triangles[i+1]*2], currentPath[triangles[i+1]*2+1]);
-					this.clipPlane.push(currentPath[triangles[i+2]*2], currentPath[triangles[i+2]*2+1]);
-				}			
-				if (!closed) {
-					currentPath.pop();
-					currentPath.pop();
+				var currentPath = _path.paths[i];
+				console.log(currentPath)
+				
+				var transformedPath = [];
+				
+				for (var j = 0; j < currentPath.length; j+=2) {
+					var tranformed = vectTransform(this._transform, [currentPath[j], currentPath[j+1]]);
+					transformedPath.push(tranformed[0], tranformed[1])
 				}
+				
+				var closed = transformedPath[0] == transformedPath[transformedPath.length-2] && transformedPath[1] == transformedPath[transformedPath.length-1];			
+				if (!closed) {
+					transformedPath.push(transformedPath[0],  transformedPath[1]);
+				}			
+				
+				var triangles = earcut(transformedPath);
+				for (var i = 0; i < triangles.length; i+=3) {
+					this.clipPlane.push(transformedPath[triangles[i]*2], transformedPath[triangles[i]*2+1]);
+					this.clipPlane.push(transformedPath[triangles[i+1]*2], transformedPath[triangles[i+1]*2+1]);
+					this.clipPlane.push(transformedPath[triangles[i+2]*2], transformedPath[triangles[i+2]*2+1]);
+				}
+				
+				console.log(this.clipPlane)
 			}
 		},
 		resetClip() {
@@ -1528,7 +1542,9 @@
 		__prepare_clip() {
 			if (this.clipPlane) {
 				var gl = this.gl;
+				gl.activeTexture(gl.TEXTURE5);
 				if (!this.clipFramebuffer) {
+					gl.activeTexture(gl.TEXTURE5);
 					this.clipFramebuffer = gl.createFramebuffer();
 					gl.bindFramebuffer(gl.FRAMEBUFFER, this.clipFramebuffer);
 					this.clipFramebuffer.width = this.width;
@@ -1541,7 +1557,8 @@
 					gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
 					gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.clipTexture, 0);
 					gl.clearColor(0, 0, 0, 0);
-				} else {				
+				} else {
+					gl.activeTexture(gl.TEXTURE5);					
 					gl.bindFramebuffer(gl.FRAMEBUFFER, this.clipFramebuffer);
 					gl.bindTexture(gl.TEXTURE_2D, this.clipTexture);
 					gl.clear(gl.COLOR_BUFFER_BIT);
@@ -1552,14 +1569,18 @@
 			var gl = this.gl;
 			if (this.clipPlane && this.clipPlane.length > 0 ) {			
 				var program = this._select_program(this.texture_program);
-				gl.activeTexture(gl.TEXTURE3);
+				gl.bindFramebuffer(gl.FRAMEBUFFER, null);		
+				
+				gl.activeTexture(gl.TEXTURE5);
 				gl.bindTexture(gl.TEXTURE_2D, this.clipTexture);
-				gl.uniform1i(program.textureLocation, 3);
-				gl.bindFramebuffer(gl.FRAMEBUFFER, null);				
+				gl.uniform1i(program.textureLocation, 5);	
+				
 				gl.uniformMatrix4fv(program.transformLocation, false, this.projectionMatrix);				
-				gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);				
+				gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);	
+			
 				gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(this.clipPlane), gl.STATIC_DRAW);
-				gl.uniform1f(program.zindexLocation, z_index);
+				
+				gl.uniform1f(program.zindexLocation, z_index);		
 				gl.drawArrays(gl.TRIANGLES, 0, this.clipPlane.length/2);
 			}
 			gl.bindTexture(gl.TEXTURE_2D, null);
@@ -1844,6 +1865,7 @@
 			gl.uniformMatrix4fv(program.transformLocation, false, new_transform);
 
 			draw_cb(); //draw the thing we're shadowing into the texture
+			
 			gl.uniformMatrix4fv(program.transformLocation, false, this.projectionMatrix);
 			
 			var program = this._select_program(this.shadow_program);			
@@ -1916,7 +1938,6 @@
 			}
 		
 			gl.uniform2f(program.directionLocation, 1/this.width, 0);	
-			//gl.uniform2f(program.offsetLocation, -this.shadowOffsetX/this.width, this.shadowOffsetY/this.height);
 			gl.uniform2f(program.offsetLocation, 0, 0);
 			gl.uniform1fv(program.gaussCoeffLocation, coeff);
 			gl.uniform4fv(program.shadowColorLocation, this._shadowColorRGBA)
@@ -2059,8 +2080,7 @@
 			gl.uniformMatrix4fv(program.transformLocation, false, transform);
 			gl.uniform1f(program.globalAlphaLocation, this.globalAlpha);
 			this._set_zindex();
-			
-			
+	
 			gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);
 			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(points), gl.STATIC_DRAW);
 			gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);	
@@ -2098,6 +2118,7 @@
 				array.push(array[0], array[1]);
 			}
 
+			var to_draw_or_not_to_draw;
 			if (use_linedash) {
 				var result = this._prepare_line_dash(array, closed, lineWidthDiv2);
 				to_draw_or_not_to_draw = result[1];
@@ -2502,7 +2523,6 @@
 			}
 			
 			//we take z-index now as we're supposed to draw now
-			this.currentZIndex-=EPSILON;
 			var temp_z_index = this.currentZIndex; 			
 			this.currentZIndex-=5*EPSILON;
 			
@@ -2557,7 +2577,7 @@
 					gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
 					srcX = 0; srcY=0; img_width=srcWidth; img_height=srcHeight;
 				}
-				
+
 				gl.uniform1i(program.textureLocation, 4);
 				
 				var texMatrix = [
@@ -2582,18 +2602,14 @@
 				var points = [0, 0, 1, 0, 1, 1, 0, 1]
 				
 				//TODO: canvasMark fails when I enable clipping on drawImage
-				_this.__prepare_clip();				
+				_this.__prepare_clip();	
+				
 				_this._draw_shadow(matrix, temp_z_index, function() {	
-					gl.activeTexture(gl.TEXTURE4);
-					gl.bindTexture(gl.TEXTURE_2D, _this.imageTexture);	
 					gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);				
 					gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(points), gl.STATIC_DRAW);
 					gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
 				});
 				temp_z_index -= EPSILON;
-
-				gl.activeTexture(gl.TEXTURE4);
-				gl.bindTexture(gl.TEXTURE_2D, _this.imageTexture);	
 				
 				matrix = matrixMultiply(matrix, _this.projectionMatrix);
 				gl.uniformMatrix4fv(program.transformLocation, false, matrix);
@@ -2605,9 +2621,9 @@
 				
 				gl.uniform1f(program.zindexLocation, temp_z_index);
 				gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);	
+				temp_z_index -= EPSILON;
 				
 				_this.__execute_clip(temp_z_index)
-				temp_z_index -= EPSILON;
 			}
 			
 			if (img.complete || (!(img instanceof HTMLImageElement))) {

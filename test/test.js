@@ -26,13 +26,18 @@ function do_test(test) {
 
 window.onload = function() {
 	do_test(function(ctx) {
-		ctx.fillStyle = '#0f0';
-		ctx.fillRect(0, 0, 100, 50);
-
-		ctx.beginPath();
+		//ctx.shadowBlur = 10;
+		
+		//console.log(ctx._transform)
+		ctx.translate(2,2);
+		ctx.rect(5,5,30,30);
 		ctx.clip();
-
-		ctx.fillStyle = '#f00';
-		ctx.fillRect(0, 0, 100, 50);
+		
+		ctx.resetTransform();
+		ctx.beginPath();
+		ctx.rect(5,5,30,30);
+		ctx.stroke()
+		//var image = document.getElementById("source");
+		//ctx.drawImage(image, 33, 71, 104, 124, 21, 20, 87, 104);
 	});
 }
