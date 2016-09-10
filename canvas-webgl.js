@@ -811,7 +811,7 @@
 		},
 		ellipse(x, y, radiusX, radiusY, rotation, startAngle, endAngle, anticlockwise) {
 			if (startAngle == endAngle) return;
-			var fullCircle = anticlockwise ? startAngle-endAngle >= (2*Math.PI) : endAngle-startAngle >= (2*Math.PI);
+			var fullCircle = anticlockwise ? Math.abs(startAngle-endAngle) >= (2*Math.PI) : Math.abs(endAngle-startAngle) >= (2*Math.PI);
 			
 			//bring angles all in [0, 2*PI] range
 			startAngle = startAngle % (2 * Math.PI);
@@ -857,7 +857,7 @@
 		arc(x, y, radius, startAngle, endAngle, anticlockwise) {			
 			//bring angles all in [0, 2*PI] range
 			if (startAngle == endAngle) return;
-			var fullCircle = anticlockwise ? startAngle-endAngle >= (2*Math.PI) : endAngle-startAngle >= (2*Math.PI);
+			var fullCircle = anticlockwise ? Math.abs(startAngle-endAngle) >= (2*Math.PI) : Math.abs(endAngle-startAngle) >= (2*Math.PI);
 
 			startAngle = startAngle % (2 * Math.PI);
 			endAngle = endAngle % (2 * Math.PI);
@@ -1242,7 +1242,7 @@
 			this.font = "10px sans-serif";
 			this.lineJoin = "miter";
 			this.miterLimit = 10;
-			this.textAlign = "left";
+			this.textAlign = "start";
 			this.lineCap = 'butt'
 			this.lineDash = [];
 			this.lineDashOffset = 0;
@@ -1320,34 +1320,35 @@
 			  
 		},
 		restore() {
-			var s = this.saveStack.pop();
-			this._transform = s._transform;
-			this.clipPlane = s.clipPlane;
-			this.strokeStyleRGBA = s.strokeStyleRGBA;
-			this.fillStyleRGBA = s.fillStyleRGBA;
-			this._strokeStyle = s._strokeStyle;
-			this._fillStyle = s._fillStyle;
-			this.globalAlpha = s.globalAlpha;
-			this.lineWidth = s.lineWidth;
-			this.lineCap = s.lineCap;
-			this.lineJoin = s.lineJoin;
-			this.miterLimit = s.miterLimit;
-			this.lineDashOffset = s.lineDashOffset;
-			this.shadowOffsetX = s.shadowOffsetX;
-			this.shadowOffsetY = s.shadowOffsetY;
-			this._shadowColor = s._shadowColor;
-			this._shadowColorRGBA = s._shadowColorRGBA;
-			this.shadowBlur = s.shadowBlur;
-			this.filter = s.filter;
-			this.globalCompositeOperation = s.globalCompositeOperation;
-			this.font = s.font;
-			this.textAlign = s.textAlign;
-			this.textBaseline = s.textBaseline;
-			this.direction = s.direction;
-			this.imageSmoothingEnabled = s.imageSmoothingEnabled;
-			this.imageSmoothingQuality = s.imageSmoothingQuality;
-			this.lineDash = s.lineDash;
-			
+			if (this.saveStack && this.saveStack.length > 0) {
+				var s = this.saveStack.pop();
+				this._transform = s._transform;
+				this.clipPlane = s.clipPlane;
+				this.strokeStyleRGBA = s.strokeStyleRGBA;
+				this.fillStyleRGBA = s.fillStyleRGBA;
+				this._strokeStyle = s._strokeStyle;
+				this._fillStyle = s._fillStyle;
+				this.globalAlpha = s.globalAlpha;
+				this.lineWidth = s.lineWidth;
+				this.lineCap = s.lineCap;
+				this.lineJoin = s.lineJoin;
+				this.miterLimit = s.miterLimit;
+				this.lineDashOffset = s.lineDashOffset;
+				this.shadowOffsetX = s.shadowOffsetX;
+				this.shadowOffsetY = s.shadowOffsetY;
+				this._shadowColor = s._shadowColor;
+				this._shadowColorRGBA = s._shadowColorRGBA;
+				this.shadowBlur = s.shadowBlur;
+				this.filter = s.filter;
+				this.globalCompositeOperation = s.globalCompositeOperation;
+				this.font = s.font;
+				this.textAlign = s.textAlign;
+				this.textBaseline = s.textBaseline;
+				this.direction = s.direction;
+				this.imageSmoothingEnabled = s.imageSmoothingEnabled;
+				this.imageSmoothingQuality = s.imageSmoothingQuality;
+				this.lineDash = s.lineDash;
+			}
 		},
 		getImageData(sx, sy, sw, sh) {
 			var gl = this.gl;
@@ -1550,6 +1551,9 @@
 				gl.bindTexture(gl.TEXTURE_2D, this.clipTexture);
 				gl.uniform1i(program.textureLocation, 3);
 				gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+				
+				//var transform = matrixMultiply(this._transform, this.projectionMatrix);
+				//gl.uniformMatrix4fv(program.transformLocation, false, transform);
 				
 				gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);				
 				gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(this.clipPlane), gl.STATIC_DRAW);
@@ -2267,6 +2271,7 @@
 				gl.uniform4fv(program.colorLocation, this.strokeStyleRGBA);
 			}
 			
+			/*
 			if (!use_linedash && this.lineWidth == 1) {
 				//used only for linewidth == 1
 				var closed_but_not_finished = (closed && (array[0] != array[array.length-2] || array[1] != array[array.length-1]));
@@ -2287,6 +2292,7 @@
 				}
 				return;
 			}
+			*/
 			
 			var lineWidthDiv2 = this.lineWidth / 2.0;
 			
@@ -2568,6 +2574,7 @@
 				gl.uniformMatrix4fv(program.transformLocation, false, matrix);
 				gl.uniform1f(program.globalAlphaLocation, _this.globalAlpha);
 				
+				//TODO: canvasMark fails when I enable clipping on drawImage
 				//_this.__prepare_clip();
 				gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);
 				gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);	

@@ -26,9 +26,47 @@ function do_test(test) {
 
 window.onload = function() {
 	do_test(function(ctx) {
-		ctx.lineWidth = 5;
-		ctx.rect(20, 20, 20, 20);
+		//cctx.fillStyle = '#0f0';
+		//cctx.fillRect(0, 0, 100, 50);
+
+		//cvar tol = 1; // tolerance to avoid antialiasing artifacts
+
+		//cctx.lineJoin = 'round';
+		//ctx.lineWidth = 2;
+
+		//cctx.fillStyle = '#f00';
+		ctx.strokeStyle = '#000';
+
+		//ctx.fillRect(10, 10, 20, 20);
+		//ctx.fillRect(20, 20, 20, 20);
+		ctx.beginPath();
+		ctx.moveTo(30, 20);
+		ctx.arc(30, 20, 10, 0, 2*Math.PI, true);
 		ctx.stroke();
-		console.log(ctx.isPointInStroke(10, 10))
+
+		/*
+		ctx.beginPath();
+		ctx.moveTo(10, 20);
+		ctx.lineTo(30, 20);
+		ctx.lineTo(30, 40);
+		ctx.stroke();
+
+
+		ctx.fillStyle = '#0f0';
+		ctx.strokeStyle = '#f00';
+
+		ctx.beginPath();
+		ctx.moveTo(60, 20);
+		ctx.lineTo(80, 20);
+		ctx.lineTo(80, 40);
+		ctx.stroke();
+
+		ctx.fillRect(60, 10, 20, 20);
+		ctx.fillRect(70, 20, 20, 20);
+		ctx.beginPath();
+		ctx.moveTo(80, 20);
+		ctx.arc(80, 20, 10+tol, 0, 2*Math.PI, true);
+		ctx.fill();
+		*/
 	});
 }
