@@ -2,7 +2,7 @@
 
 (function() {	
 	var EPSILON = 0.0000001; //mostly used for zindex increments
-	var BEZIER_CURVE_RESOLUTION = 10; //space between interpolation points for quadratic and bezier curve approx. in pixels.
+	var BEZIER_CURVE_RESOLUTION = 5; //space between interpolation points for quadratic and bezier curve approx. in pixels.
 	var ARC_RESOLUTION = 5;  //space between interpolation points for quadratic and bezier curve approx. in pixels. Also used for linejoins and linecaps
 	var SQRT_2 = Math.sqrt(2);
 	
@@ -36,7 +36,7 @@
 			    color += texture2D(texture, v_texcoord + float(i) * u_direction) * u_gauss_coeff[i];
 			    color += texture2D(texture, v_texcoord - float(i) * u_direction) * u_gauss_coeff[i];
 		    }  
-			gl_FragColor = vec4(u_shadow_color.xyz, u_shadow_color.w * color.w * u_global_alpha);			
+			gl_FragColor = vec4(u_shadow_color.xyz, u_shadow_color.w * color.w * u_global_alpha);
 		}
 	`
 	
@@ -84,7 +84,8 @@
 			   v_texcoord.y > 1.0) {
 			 discard;
 		   }
-		   gl_FragColor = u_global_alpha * texture2D(texture, v_texcoord);
+		   gl_FragColor = texture2D(texture, v_texcoord);
+		   gl_FragColor.w *= u_global_alpha;
 		}
 	`
 
@@ -109,7 +110,8 @@
 		varying vec2 v_texcoord;
 		 
 		void main() {
-		   gl_FragColor = u_global_alpha * texture2D(texture, v_texcoord);
+		   gl_FragColor = texture2D(texture, v_texcoord);
+		   gl_FragColor.w *= u_global_alpha;
 		}
 	`
 	
@@ -145,7 +147,8 @@
 		uniform float u_global_alpha;
 
 		void main() {
-		   gl_FragColor = u_global_alpha * u_color;
+		   gl_FragColor = u_color;
+		   gl_FragColor.w *= u_global_alpha;
 		}
 	`
 
@@ -253,7 +256,7 @@
 		
 
 		void main() {
-		   gl_FragColor = u_global_alpha * v_alpha * vec4(u_color.xyz, u_color.w);
+		   gl_FragColor = v_alpha * vec4(u_color.xyz, u_color.w * u_global_alpha);
 		}
 	`
 	
@@ -282,7 +285,8 @@
 		uniform float u_global_alpha;
 
 		void main() {
-		   gl_FragColor = u_global_alpha * v_alpha * texture2D(texture, v_texcoord);
+		   gl_FragColor = v_alpha * texture2D(texture, v_texcoord);
+		   gl_FragColor.w *= u_global_alpha;
 		}
 	`
 	
@@ -352,25 +356,32 @@
 	}
 
 	function _add_arc(triangle_buffer, x, y, radius, startAngle, endAngle, anticlockwise) {
-		if (anticlockwise) {
-			var temp = startAngle;
-			startAngle = endAngle;
-			endAngle = temp;
-		}
-		
-		if (startAngle > endAngle) { 
+		//bring angles all in [0, 2*PI] range
+		startAngle = startAngle % (2 * Math.PI);
+		endAngle = endAngle % (2 * Math.PI);
+		if (startAngle < 0) startAngle += 2*Math.PI;
+		if (endAngle < 0) endAngle += 2*Math.PI;
+
+		if (startAngle>=endAngle) {
 			endAngle += 2 * Math.PI;
 		}
-		
 		var diff = endAngle - startAngle;
-		var length = diff * radius; 			
+		
+		var direction = 1;
+		if (anticlockwise) {
+			direction = -1;			
+			diff = 2*Math.PI - diff;
+			if (diff == 0) diff = 2*Math.PI;
+		}
+		
+		var length = diff * radius;
 		var nr_of_interpolation_points = length / ARC_RESOLUTION;		
 		var dangle = diff / nr_of_interpolation_points;
 		
 		var angle = startAngle;
 		for (var j = 0; j < nr_of_interpolation_points+1; j++) {
 			triangle_buffer.push(x, y, x + radius * Math.cos(angle), y + radius * Math.sin(angle));
-			angle += dangle;
+			angle += direction * dangle;
 		}
 	}
 	
@@ -394,7 +405,7 @@
 	}
 	
 	var CanvasPattern = function(image, repetition) {
-		this.image = new Image(image);
+		this.image = image;
 		this.repetition = repetition;
 	}
 	
@@ -729,16 +740,14 @@
 				for (var j in path)
 					new_path.push(path[j]); //TODO: * transform
 				this.paths.push(new_path);
+				this.closed.push(paths.closed[i]);
 			}
 		},
 		closePath() {
 			if (this.paths.length > 0) {
 				var currentPath = this.paths[this.paths.length-1];
 				if (currentPath.length >= 2) {
-					if (currentPath[currentPath.length-2] != currentPath[0] || currentPath[currentPath.length-1] != currentPath[1]) {
-						currentPath.push(currentPath[0], currentPath[1]);
-					}
-					this.closed[this.paths[this.paths.length-1]] = true;
+					this.closed[this.paths.length-1] = true;
 					this.paths.push([currentPath[0], currentPath[1]]);
 					this.closed.push(false);
 				}		
@@ -749,6 +758,7 @@
 				this.paths[this.paths.length-1].push(x,y);
 			} else {
 				this.paths.push([x,y]);
+				this.closed.push(false);
 			}
 		},
 		lineTo(x,y) {
@@ -756,6 +766,8 @@
 			currentPath.push(x,y);
 		},
 		bezierCurveTo(x1, y1, x2, y2, x3, y3) {
+			if (!isFinite(x1) || !isFinite(y1) || !isFinite(x2) || !isFinite(y2) || !isFinite(x3) || !isFinite(y3)) return;
+			
 			var currentPath = this.paths[this.paths.length-1];
 			var x0 = currentPath[currentPath.length-2], y0 = currentPath[currentPath.length-1];
 			function calc(t) {
@@ -767,6 +779,7 @@
 								 + Math.sqrt(Math.pow(x2 - x1, 2) +  Math.pow(y2 - y1, 2))
 								 + Math.sqrt(Math.pow(x1 - x0, 2) +  Math.pow(y1 - y0, 2));							 
 			var step = BEZIER_CURVE_RESOLUTION / length_estimate;
+			step = Math.min(step, 0.5); //do at least 1 step
 			
 			for (var t = step; t < 1; t+=step) {
 				var point = calc(t);
@@ -775,74 +788,109 @@
 			currentPath.push(x3, y3);
 		},
 		quadraticCurveTo(x1, y1, x2, y2) {
+			if (!isFinite(x1) || !isFinite(y1) || !isFinite(x2) || !isFinite(y2)) return;
 			var currentPath = this.paths[this.paths.length-1];
 			var x0 = currentPath[currentPath.length-2], y0 = currentPath[currentPath.length-1];
+			
 			function calc(t) {
 				//https://en.wikipedia.org/wiki/B%C3%A9zier_curve#Quadratic_B.C3.A9zier_curves
 				var coeff = [Math.pow(1-t, 2), 2 * (1-t) * t, Math.pow(t,2)];
 				return [coeff[0] * x0 + coeff[1] * x1 + coeff[2] * x2, coeff[0] * y0 + coeff[1] * y1 + coeff[2] * y2];
 			}
 			var length_estimate =  Math.sqrt(Math.pow(x2 - x1, 2) +  Math.pow(y2 - y1, 2))
-								 + Math.sqrt(Math.pow(x1 - x0, 2) +  Math.pow(y1 - y0, 2));							 
+								 + Math.sqrt(Math.pow(x1 - x0, 2) +  Math.pow(y1 - y0, 2));
+					 
 			var step = BEZIER_CURVE_RESOLUTION / length_estimate;
+			step = Math.min(step, 0.5); //do at least 1 step
+			
 			for (var t = step; t < 1; t+=step) {
 				var point = calc(t);
 				currentPath.push(point[0], point[1]);
 			}
-			currentPath.push(x2, y2);
+			currentPath.push(x2, y2);			
 		},
 		ellipse(x, y, radiusX, radiusY, rotation, startAngle, endAngle, anticlockwise) {
-			if (anticlockwise) {
-				var temp = startAngle;
-				startAngle = endAngle;
-				endAngle = temp;
-			}
+			if (startAngle == endAngle) return;
+			var fullCircle = anticlockwise ? startAngle-endAngle >= (2*Math.PI) : endAngle-startAngle >= (2*Math.PI);
 			
-			var currentPath = this.paths[this.paths.length-1];
-			if (startAngle > endAngle) { 
+			//bring angles all in [0, 2*PI] range
+			startAngle = startAngle % (2 * Math.PI);
+			endAngle = endAngle % (2 * Math.PI);
+			if (startAngle < 0) startAngle += 2*Math.PI;
+			if (endAngle < 0) endAngle += 2*Math.PI;
+
+			if (startAngle>=endAngle) {
 				endAngle += 2 * Math.PI;
 			}
-			
+
 			var diff = endAngle - startAngle;
-			var length = (diff * radiusX + diff * radiusY) / 2; 			
+
+			var direction = 1;
+			if (anticlockwise) {
+				direction = -1;			
+				diff = 2*Math.PI - diff;
+			}
+			
+			if (fullCircle) diff = 2*Math.PI;
+			
+			var length = (diff * radiusX + diff * radiusY) / 2; 
 			var nr_of_interpolation_points = length / ARC_RESOLUTION;		
 			var dangle = diff / nr_of_interpolation_points;
 
-			var angle = endAngle;
+			var currentPath = this.paths[this.paths.length-1];
 			
+			var angle = startAngle;
 			var cos_rotation = Math.cos(rotation);
 			var sin_rotation = Math.sin(rotation);
-			for (var j = 0; j < nr_of_interpolation_points+1; j++) {				
+			for (var j = 0; j < nr_of_interpolation_points; j++) {				
 				var x1 = radiusX * Math.cos(angle);
 				var y1 = radiusY * Math.sin(angle);
 				var x2 = x + x1 * cos_rotation - y1 * sin_rotation;
 				var y2 = y + x1 * sin_rotation + y1 * cos_rotation;		
 				currentPath.push(x2, y2);
-				angle -= dangle;
-			}			
-		},
-		arc(x, y, radius, startAngle, endAngle, anticlockwise) {
-			if (anticlockwise) {
-				var temp = startAngle;
-				startAngle = endAngle;
-				endAngle = temp;
+				angle += direction * dangle;
 			}
-								
-			var currentPath = this.paths[this.paths.length-1];
-			if (startAngle > endAngle) { 
+			var x1 = radiusX * Math.cos(endAngle);
+			var y1 = radiusY * Math.sin(endAngle);
+			currentPath.push(x + x1 * cos_rotation - y1 * sin_rotation, y + x1 * sin_rotation + y1 * cos_rotation);
+		},
+		arc(x, y, radius, startAngle, endAngle, anticlockwise) {			
+			//bring angles all in [0, 2*PI] range
+			if (startAngle == endAngle) return;
+			var fullCircle = anticlockwise ? startAngle-endAngle >= (2*Math.PI) : endAngle-startAngle >= (2*Math.PI);
+
+			startAngle = startAngle % (2 * Math.PI);
+			endAngle = endAngle % (2 * Math.PI);
+			
+			if (startAngle < 0) startAngle += 2*Math.PI;
+			if (endAngle < 0) endAngle += 2*Math.PI;
+
+			if (startAngle>=endAngle) {
 				endAngle += 2 * Math.PI;
 			}
 			
 			var diff = endAngle - startAngle;
-			var length = Math.abs(diff) * radius; 			
+			var direction = 1;
+			if (anticlockwise) {
+				direction = -1;			
+				diff = 2*Math.PI - diff;
+			}
+			
+			if (fullCircle) diff = 2*Math.PI;
+			
+			var length = diff * radius;
 			var nr_of_interpolation_points = length / ARC_RESOLUTION;		
 			var dangle = diff / nr_of_interpolation_points;
+			
+			var currentPath = this.paths[this.paths.length-1];
 
-			var angle = endAngle;
-			for (var j = 0; j < nr_of_interpolation_points+1; j++) {
+			var angle = startAngle;
+			for (var j = 0; j < nr_of_interpolation_points; j++) {
 				currentPath.push(x + radius * Math.cos(angle), y + radius * Math.sin(angle));
-				angle -= dangle;
+				angle += direction * dangle;
 			}
+			currentPath.push(x + radius * Math.cos(endAngle), y + radius * Math.sin(endAngle));
+						
 		},
 		arcTo(x1, y1, x2, y2, radius) {
 			var currentPath = this.paths[this.paths.length-1];
@@ -1147,8 +1195,8 @@
 		//init some other random webgl stuff
 		gl.enable(gl.DEPTH_TEST);
 		gl.depthFunc(gl.LEQUAL);
-		gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 		
+		gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);	
 		gl.enable(gl.BLEND);
 
 		//TODO: this doesn't look pretty, does it
@@ -1374,7 +1422,8 @@
 			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([dx+x, dy+y, dx+x+w, dy+y, dx+x+w, dy+y+h, dx+x, dy+y+h]), gl.STATIC_DRAW);
 			gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);	
 			gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
-			this.__execute_clip();
+			this.__execute_clip(this.currentZIndex)
+			this.currentZIndex -=EPSILON;
 		},
 		createImageData(width, height) {
 			if (height === undefined) {
@@ -1439,14 +1488,29 @@
 			if(path) {  
 				_path = path;
 			}
-			var currentPath = _path.paths[_path.paths.length-1];
-			this.clipPlane = [];
-			var triangles = earcut(currentPath);
-			for (var i = 0; i < triangles.length; i+=3) {
-				this.clipPlane.push(currentPath[triangles[i]*2], currentPath[triangles[i]*2+1]);
-				this.clipPlane.push(currentPath[triangles[i+1]*2], currentPath[triangles[i+1]*2+1]);
-				this.clipPlane.push(currentPath[triangles[i+2]*2], currentPath[triangles[i+2]*2+1]);
+			
+			if (!this.clipPlane) {
+				this.clipPlane = [];
 			}
+			for (var i in _path.paths) {		
+				var currentPath = _path.paths[i];					
+				var closed = currentPath[0] == currentPath[currentPath.length-2] && currentPath[1] == currentPath[currentPath.length-1];			
+				if (!closed) {
+					currentPath.push(currentPath[0],  currentPath[1]);
+				}			
+				var triangles = earcut(currentPath);
+				for (var i = 0; i < triangles.length; i+=3) {
+					this.clipPlane.push(currentPath[triangles[i]*2], currentPath[triangles[i]*2+1]);
+					this.clipPlane.push(currentPath[triangles[i+1]*2], currentPath[triangles[i+1]*2+1]);
+					this.clipPlane.push(currentPath[triangles[i+2]*2], currentPath[triangles[i+2]*2+1]);
+				}
+								
+				if (!closed) {
+					currentPath.pop();
+					currentPath.pop();
+				}
+			}
+			
 		},
 		resetClip() {
 			delete this.clipPlane;
@@ -1478,7 +1542,7 @@
 				}	
 			}
 		},
-		__execute_clip() {
+		__execute_clip(z_index) {
 			if (this.clipPlane && this.clipPlane.length > 0) {
 				var gl = this.gl;
 				var program = this._select_program(this.texture_program);
@@ -1489,7 +1553,7 @@
 				
 				gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);				
 				gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(this.clipPlane), gl.STATIC_DRAW);
-				this._set_zindex();
+				gl.uniform1f(program.zindexLocation, z_index);
 				gl.drawArrays(gl.TRIANGLES, 0, this.clipPlane.length/2);			
 				
 				gl.bindTexture(gl.TEXTURE_2D, null);
@@ -1510,14 +1574,24 @@
 				_y = x;
 			}
 			
-			var currentPath = _path.paths[_path.paths.length-1];
-			var triangles = earcut(currentPath);
-			var data = []		
-			for (var i = 0; i < triangles.length; i+=3) {
-				if (is_in_triangle(_x, _y, currentPath[triangles[i]*2],currentPath[triangles[i]*2+1], 
-										   currentPath[triangles[i+1]*2],currentPath[triangles[i+1]*2+1],
-										   currentPath[triangles[i+2]*2],currentPath[triangles[i+2]*2+1])) return true;
+			for (var k in _path.paths) {
+				var currentPath = _path.paths[k];
+				var closed = currentPath[0] == currentPath[currentPath.length-2] && currentPath[1] == currentPath[currentPath.length-1];			
+				if (!closed) {
+					currentPath.push(currentPath[0],  currentPath[1]);
+				}
+				var triangles = earcut(currentPath);	
+				for (var i = 0; i < triangles.length; i+=3) {
+					if (is_in_triangle(_x, _y, currentPath[triangles[i]*2],currentPath[triangles[i]*2+1], 
+											   currentPath[triangles[i+1]*2],currentPath[triangles[i+1]*2+1],
+											   currentPath[triangles[i+2]*2],currentPath[triangles[i+2]*2+1])) return true;
+				}			
+				if (!closed) {
+					currentPath.pop();
+					currentPath.pop();
+				}
 			}
+			
 			return false;
 		},
 		isPointInStroke(path, x, y) {
@@ -1532,19 +1606,24 @@
 				_x = path;
 				_y = x;
 			}
-			var currentPath = JSON.parse(JSON.stringify(_path.paths[_path.paths.length-1]));
 			
-			var lineWidthDiv2 = this.lineWidth / 2.0;
-			var closed = currentPath[0] == currentPath[currentPath.length-2] && currentPath[1] == currentPath[currentPath.length-1];
-			
-			var result = this.__prepareStroke(currentPath, closed, lineWidthDiv2, false);
-			var triangle_buffer = result[0];
-			
-			for (var i = 0; i < triangle_buffer.length-5; i++) {
-				if (is_in_triangle(_x, _y, triangle_buffer[i],   triangle_buffer[i+1], 
-										   triangle_buffer[i+2], triangle_buffer[i+3],
-										   triangle_buffer[i+4], triangle_buffer[i+5])) return true;
-			}		
+			for (var k in _path.paths) {		
+				var currentPath = _path.paths[k];
+				
+				var lineWidthDiv2 = this.lineWidth / 2.0;
+				
+				var result = this.__prepareStroke(currentPath, _path.closed[k], lineWidthDiv2, false);
+				var triangle_buffer = result[0];
+
+				for (var i = 0; i < triangle_buffer.length-7; i+=2) {
+					if (is_in_triangle(_x, _y, triangle_buffer[i],   triangle_buffer[i+1], 
+											   triangle_buffer[i+2], triangle_buffer[i+3],
+											   triangle_buffer[i+4], triangle_buffer[i+5])) { return true; }
+					if (is_in_triangle(_x, _y, triangle_buffer[i+4], triangle_buffer[i+5], 
+											   triangle_buffer[i+6], triangle_buffer[i+7],
+											   triangle_buffer[i+2], triangle_buffer[i+3])) { return true; }
+				}
+			}
 			return false;
 			
 		},
@@ -1699,8 +1778,8 @@
 			return program;
 		},
 		_draw_shadow(transform, z_index, draw_cb) {
-			if (this.shadowOffsetX == 0 && this.shadowOffsetX==0 && this.shadowBlur == 0) return;
-			
+			if (this.shadowOffsetX == 0 && this.shadowOffsetY==0 && this.shadowBlur == 0) return;
+						
 			var gl = this.gl;
 			
 			var old_texture = gl.getParameter(gl.ACTIVE_TEXTURE);
@@ -1861,7 +1940,6 @@
 			gl.uniform1i(program.textureLocation, 1);
 						
 			gl.uniform1f(program.zindexLocation, z_index);	
-			this.currentZIndex -= EPSILON;
 			gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
 			
 			this._select_program(old_program);	
@@ -1895,19 +1973,19 @@
 					currentPath.push(currentPath[0],  currentPath[1]);
 				}
 				var triangles = earcut(currentPath);
-				if (!closed) {
-					currentPath.pop();
-					currentPath.pop();
-				}
-				
-				var data = []
-				
+
+				var data = []				
 				for (var i = 0; i < triangles.length; i+=3) {
 					data.push(currentPath[triangles[i]*2], currentPath[triangles[i]*2+1]);
 					data.push(currentPath[triangles[i+1]*2], currentPath[triangles[i+1]*2+1]);
 					data.push(currentPath[triangles[i+2]*2], currentPath[triangles[i+2]*2+1]);
 				}
-				
+
+				if (!closed) {
+					currentPath.pop();
+					currentPath.pop();
+				}
+								
 				var _this = this;
 				
 				this._draw_shadow(this._transform, this.currentZIndex, function() {	
@@ -1927,7 +2005,8 @@
 				gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW);
 				gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);	
 				gl.drawArrays(gl.TRIANGLES, 0, data.length/2);
-				this.__execute_clip()
+				this.__execute_clip(this.currentZIndex)
+				this.currentZIndex -=EPSILON;
 			}
 		},
 		fillRect(x, y, width, height) {
@@ -1965,7 +2044,8 @@
 			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(points), gl.STATIC_DRAW);
 			gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);	
 			gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
-			this.__execute_clip();
+			this.__execute_clip(this.currentZIndex)
+			this.currentZIndex -=EPSILON;
 		},
 		clearRect(x, y, width, height) {
 			var gl = this.gl;
@@ -1978,14 +2058,25 @@
 				gl.disable(gl.SCISSOR_TEST);
 			}
 		},
-		__prepareStroke(array, closed, lineWidthDiv2, use_linedash) {
-			//note: if closed, expects array[0:1] == array[-2:-1]
-			
+		__prepareStroke(path, closed, lineWidthDiv2, use_linedash) {
 			//Polyline algorithm, take a piece of paper and draw it if you want to understand what is happening
 			//If stroking turns out to be slow, here will be your problem. This should and can easily 
 			//be implemented in a geometry shader or something so it runs on the gpu. But webgl doesn't
 			//support geometry shaders for some reason.
+
+			//remove duplicate points, they mess up the math
+			var array = [path[0], path[1]];
+			for (var i = 2; i < path.length; i+=2) {
+				if (path[i] != array[array.length-2] || path[i+1] != array[array.length-1]) {
+					array.push(path[i], path[i+1])
+				}
+			}
 			
+			//implicitly close
+			if (closed && (array[array.length-2] != array[0] || array[array.length-1] != array[1])) {
+				array.push(array[0], array[1]);
+			}
+
 			if (use_linedash) {
 				var to_draw_or_not_to_draw, new_array;
 				[new_array, to_draw_or_not_to_draw] = this._prepare_line_dash(array, closed, lineWidthDiv2);
@@ -1998,7 +2089,8 @@
 			var previous_triangle_buffer_length = 0;
 			
 			if (!closed) {
-				var line = [array[2] - array[0], array[3] - array[1]]
+				var line = [array[2] - array[0], array[3] - array[1]]		
+				
 				var l = Math.sqrt(Math.pow(line[0],2) + Math.pow(line[1],2))
 				line[0] /= l; line[1] /= l
 				var normal = [-line[1], line[0]]
@@ -2026,18 +2118,15 @@
 						to_draw_buffer.push(to_draw);
 					}
 					previous_triangle_buffer_length = triangle_buffer.length;
-				}	
+				}			
 			} else {
 				array.push(array[2], array[3]);
 			}
-			
+
 			
 			for (var i = 2; i < array.length-2; i+=2) {
-				//p0 = [array[i-2], array[i-1], p1 = [array[i], array[i+1], p2 = [array[i+2], array[i+3]				
-				//line = p1 - p0
-				var line = [array[i] - array[i-2], array[i+1] - array[i-1]]
-				if (line[0] == 0 && line[1] == 0) continue;
-				
+				var line = [array[i] - array[i-2], array[i+1] - array[i-1]];
+
 				var normal = [-line[1], line[0]]
 				var l = Math.sqrt(Math.pow(normal[0],2) + Math.pow(normal[1],2))
 				normal[0] /= l
@@ -2051,16 +2140,21 @@
 				p1minp0[0] /= l; p1minp0[1] /= l; 
 				var tangent = [p1minp0[0] + p2minp1[0], p1minp0[1] + p2minp1[1]]
 				var l = Math.sqrt(Math.pow(tangent[0],2) + Math.pow(tangent[1],2))
-				tangent[0] /= l; tangent[1] /= l
 				
-				var miter = [-tangent[1], tangent[0]]
-										
-				var dot = (miter[0]*normal[0] + miter[1]*normal[1]);
-				var length = lineWidthDiv2 / dot;
-								
+				var length, dot, miter;
+				if (l > 0) {
+					tangent[0] /= l; tangent[1] /= l
+					miter = [-tangent[1], tangent[0]];
+					dot = (miter[0]*normal[0] + miter[1]*normal[1]);
+					length = lineWidthDiv2 / dot;
+				} else {
+					length = 0;
+					miter = [-tangent[1], tangent[0]];
+				}
+					
 				a = [array[i] + length * miter[0], array[i+1] + length * miter[1]]
 				b = [array[i] - length * miter[0], array[i+1] - length * miter[1]]
-							
+
 				if (this.lineJoin == 'miter' && (1/dot) <= this.miterLimit) {
 					//miter
 					triangle_buffer.push(a[0], a[1], b[0], b[1]);
@@ -2096,7 +2190,6 @@
 							var n1 = [array[i] - p1minp0[1] * lineWidthDiv2, array[i+1] + p1minp0[0] * lineWidthDiv2]
 							var n2 = [array[i] - p2minp1[1] * lineWidthDiv2, array[i+1] + p2minp1[0] * lineWidthDiv2]	
 							triangle_buffer.push(n1[0], n1[1], b[0], b[1], n2[0], n2[1], b[0], b[1]);
-							//triangle_buffer.push(n2[0], n2[1], b[0], b[1], n1[0], n1[1], b[0], b[1]);
 						}
 					}
 				}			
@@ -2109,9 +2202,9 @@
 				}
 			}
 			
-			
 			if (!closed) {
-				var line = [array[array.length-2] - array[array.length-4], array[array.length-1] - array[array.length-3]]
+				var line = [array[array.length-2] - array[array.length-4], array[array.length-1] - array[array.length-3]];	
+				
 				var l = Math.sqrt(Math.pow(line[0],2) + Math.pow(line[1],2))
 				line[0] /= l; line[1] /= l;
 				var normal = [-line[1], line[0]]
@@ -2136,8 +2229,10 @@
 				triangle_buffer.push(triangle_buffer[0], triangle_buffer[1], triangle_buffer[2], triangle_buffer[3])
 				array.pop();
 				array.pop();
+				array.pop();
+				array.pop();
 			}
-
+					
 			if (use_linedash) {
 				var to_draw =  to_draw_or_not_to_draw[to_draw_or_not_to_draw.length-1];
 				for (var j = 0; j < triangle_buffer.length - previous_triangle_buffer_length; j+=2) {
@@ -2173,6 +2268,11 @@
 			}
 			
 			if (!use_linedash && this.lineWidth == 1) {
+				//used only for linewidth == 1
+				var closed_but_not_finished = (closed && (array[0] != array[array.length-2] || array[1] != array[array.length-1]));
+				if (closed_but_not_finished) {
+					array.push(array[0], array[1]);
+				}
 				var transform = matrixMultiply(this._transform, this.projectionMatrix);
 				gl.uniformMatrix4fv(program.transformLocation, false, transform);
 				gl.uniform1f(program.globalAlphaLocation, this.globalAlpha);
@@ -2181,6 +2281,10 @@
 				gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);	
 				gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(array), gl.STATIC_DRAW);
 				gl.drawArrays(gl.LINE_STRIP, 0, array.length/2);
+				if (closed_but_not_finished) {
+					array.pop();
+					array.pop();
+				}
 				return;
 			}
 			
@@ -2256,7 +2360,8 @@
 			gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);	
 			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(triangle_buffer), gl.STATIC_DRAW);
 			gl.drawArrays(gl.TRIANGLE_STRIP, 0, len);
-			this.__execute_clip();
+			this.__execute_clip(this.currentZIndex)
+			this.currentZIndex -=EPSILON;
 		},
 		strokeRect(x, y, width, height) {
 			var gl = this.gl;
@@ -2463,14 +2568,16 @@
 				gl.uniformMatrix4fv(program.transformLocation, false, matrix);
 				gl.uniform1f(program.globalAlphaLocation, _this.globalAlpha);
 				
-				_this.__prepare_clip();
+				//_this.__prepare_clip();
 				gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);
 				gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);	
 				gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(points), gl.STATIC_DRAW);
 				
 				gl.uniform1f(program.zindexLocation, temp_z_index);
-				gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);		
-				_this.__execute_clip();
+				gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);	
+				
+				//_this.__execute_clip(temp_z_index)
+				temp_z_index -= EPSILON;
 			}
 			
 			if (img.complete || (!(img instanceof HTMLImageElement))) {

@@ -26,23 +26,9 @@ function do_test(test) {
 
 window.onload = function() {
 	do_test(function(ctx) {
-		//ctx.fillStyle = 'rgba(0,255,0,1)';
-		//ctx.fillRect(0, 0, 100, 50);
-		ctx.fillStyle = 'rgba(255,0,0,0.5)';
-		ctx.shadowColor = '#000';
-		ctx.shadowOffsetX = 25;
-		ctx.fillRect(0, 0, 50, 50);
-		
-		//ctx.fillStyle = 'rgba(0,255,0,1)';
-		//ctx.fillRect(0, 0, 100, 50);
-		ctx.fillStyle = 'rgba(255,0,0,0.5)';
-		ctx.shadowColor = '#000';
-		ctx.shadowOffsetX = 0;
-		ctx.fillStyle = 'rgba(0,0,0,0.5)';
-		ctx.fillRect(25, 50, 50, 50);
-		ctx.fillStyle = 'rgba(255,0,0,0.5)';
-		ctx.fillRect(0, 50, 50, 50);
-
-		
+		ctx.lineWidth = 5;
+		ctx.rect(20, 20, 20, 20);
+		ctx.stroke();
+		console.log(ctx.isPointInStroke(10, 10))
 	});
 }
