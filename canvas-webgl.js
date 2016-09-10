@@ -1966,7 +1966,7 @@
 			if(path) {  
 				_path = path;
 			}
-			
+						
 			var gl = this.gl;			
 			var program;
 			
@@ -1979,6 +1979,7 @@
 				program = this._select_program(this.simple_program);
 				gl.uniform4fv(program.colorLocation, this.fillStyleRGBA);
 			}
+			
 			var vertices = [];
 			var indices = []
 			for (var i in _path.paths) {
@@ -1988,16 +1989,24 @@
 					currentPath.push(currentPath[0],  currentPath[1]);
 				}
 				var triangles = earcut(currentPath);
-				var offset = vertices.length;
-				for (var j in triangles) {
-					indices.push(offset+triangles[j]);
+				
+				if (triangles.length > 0) {
+					var offset = vertices.length/2;
+					for (var j in triangles) {
+						indices.push(offset+triangles[j]);
+					}
+					for (var j in currentPath) {
+						vertices.push(currentPath[j])
+					}
 				}
-				vertices = vertices.concat(currentPath);
+
 				if (!closed) {
 					currentPath.pop();
 					currentPath.pop();
 				}
 			}
+			
+			this.__prepare_clip();
 			
 			var _this = this;		
 			this._draw_shadow(this._transform, this.currentZIndex, function() {	
@@ -2015,15 +2024,16 @@
 			gl.uniformMatrix4fv(program.transformLocation, false, transform);
 			this._set_zindex();
 			gl.uniform1f(program.globalAlphaLocation, this.globalAlpha);
-			
-			this.__prepare_clip();	
+	
 			gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);					
 			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
 			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, program.indexBuffer);
 			gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);	
 			gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);
+			
 			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, program.indexBuffer);
 			gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
+			
 			this.__execute_clip(this.currentZIndex)
 			this.currentZIndex -=EPSILON;
 			
@@ -2044,6 +2054,7 @@
 				
 			var points = [x, y, x+width, y, x+width, y+height, x, y+height];	
 			
+			this.__prepare_clip();
 			var _this = this;
 			this._draw_shadow(this._transform, this.currentZIndex, function() {	
 				gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);				
@@ -2058,7 +2069,7 @@
 			gl.uniform1f(program.globalAlphaLocation, this.globalAlpha);
 			this._set_zindex();
 			
-			this.__prepare_clip();
+			
 			gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);
 			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(points), gl.STATIC_DRAW);
 			gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);	
@@ -2351,7 +2362,8 @@
 				triangle_buffer = new_triangle_buffer;
 				to_draw_buffer = new_to_draw_buffer;
 			}
-						
+				
+			this.__prepare_clip();
 			var _this = this;
 			this._draw_shadow(this._transform, this.currentZIndex, function() {
 				if (use_linedash) {
@@ -2371,7 +2383,7 @@
 			gl.uniform1f(program.globalAlphaLocation, this.globalAlpha);
 			this._set_zindex();
 			
-			this.__prepare_clip();
+			
 			if (use_linedash) {
 				gl.bindBuffer(gl.ARRAY_BUFFER, program.toDrawBuffer);
 				gl.vertexAttribPointer(program.toDrawLocation, 1, gl.FLOAT, false, 0, 0);	
@@ -2578,6 +2590,8 @@
 				//var points = [0, 0, 1, 0, 1, 1, 0, 1]
 				var points = [0, 0, 1, 0, 1, 1, 0, 1]
 				
+				//TODO: canvasMark fails when I enable clipping on drawImage
+				//_this.__prepare_clip();				
 				_this._draw_shadow(matrix, temp_z_index, function() {	
 					gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);				
 					gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(points), gl.STATIC_DRAW);
@@ -2589,8 +2603,7 @@
 				gl.uniformMatrix4fv(program.transformLocation, false, matrix);
 				gl.uniform1f(program.globalAlphaLocation, _this.globalAlpha);
 				
-				//TODO: canvasMark fails when I enable clipping on drawImage
-				//_this.__prepare_clip();
+
 				gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);
 				gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);	
 				gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(points), gl.STATIC_DRAW);

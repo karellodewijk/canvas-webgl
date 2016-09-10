@@ -26,6 +26,10 @@ function do_test(test) {
 
 window.onload = function() {
 	do_test(function(ctx) {
+		ctx.rect(5,5,30,30);
+		ctx.clip();
+		
+		//ctx.beginPath();
 		ctx.rect(10,10,50,50);
 		ctx.fill();
 	});
