@@ -1498,8 +1498,7 @@
 			var _path = this.path;
 			if(path) {  
 				_path = path;
-			}
-			
+			}		
 			if (!this.clipPlane) {
 				this.clipPlane = [];
 			}
@@ -1514,14 +1513,12 @@
 					this.clipPlane.push(currentPath[triangles[i]*2], currentPath[triangles[i]*2+1]);
 					this.clipPlane.push(currentPath[triangles[i+1]*2], currentPath[triangles[i+1]*2+1]);
 					this.clipPlane.push(currentPath[triangles[i+2]*2], currentPath[triangles[i+2]*2+1]);
-				}
-								
+				}			
 				if (!closed) {
 					currentPath.pop();
 					currentPath.pop();
 				}
 			}
-			
 		},
 		resetClip() {
 			delete this.clipPlane;
@@ -1529,14 +1526,13 @@
 			delete this.clipTexture
 		},
 		__prepare_clip() {
-			if (this.clipPlane && this.clipPlane.length > 0) {
+			if (this.clipPlane) {
 				var gl = this.gl;
 				if (!this.clipFramebuffer) {
 					this.clipFramebuffer = gl.createFramebuffer();
 					gl.bindFramebuffer(gl.FRAMEBUFFER, this.clipFramebuffer);
 					this.clipFramebuffer.width = this.width;
 					this.clipFramebuffer.height = this.height;					
-					gl.activeTexture(gl.TEXTURE0);
 					this.clipTexture = gl.createTexture();		
 					gl.bindTexture(gl.TEXTURE_2D, this.clipTexture);
 					gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.clipFramebuffer.width, this.clipFramebuffer.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
@@ -1547,31 +1543,26 @@
 					gl.clearColor(0, 0, 0, 0);
 				} else {				
 					gl.bindFramebuffer(gl.FRAMEBUFFER, this.clipFramebuffer);
-					gl.activeTexture(gl.TEXTURE0);
 					gl.bindTexture(gl.TEXTURE_2D, this.clipTexture);
 					gl.clear(gl.COLOR_BUFFER_BIT);
-				}	
+				}
 			}
 		},
 		__execute_clip(z_index) {
-			if (this.clipPlane && this.clipPlane.length > 0) {
-				var gl = this.gl;
+			var gl = this.gl;
+			if (this.clipPlane && this.clipPlane.length > 0 ) {			
 				var program = this._select_program(this.texture_program);
 				gl.activeTexture(gl.TEXTURE3);
 				gl.bindTexture(gl.TEXTURE_2D, this.clipTexture);
 				gl.uniform1i(program.textureLocation, 3);
-				gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-				
-				//var transform = matrixMultiply(this._transform, this.projectionMatrix);
-				//gl.uniformMatrix4fv(program.transformLocation, false, transform);
-				
+				gl.bindFramebuffer(gl.FRAMEBUFFER, null);				
+				gl.uniformMatrix4fv(program.transformLocation, false, this.projectionMatrix);				
 				gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);				
 				gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(this.clipPlane), gl.STATIC_DRAW);
 				gl.uniform1f(program.zindexLocation, z_index);
-				gl.drawArrays(gl.TRIANGLES, 0, this.clipPlane.length/2);			
-				
-				gl.bindTexture(gl.TEXTURE_2D, null);
+				gl.drawArrays(gl.TRIANGLES, 0, this.clipPlane.length/2);
 			}
+			gl.bindTexture(gl.TEXTURE_2D, null);
 		},
 		
 		isPointInPath(path, x, y) {
@@ -2591,19 +2582,23 @@
 				var points = [0, 0, 1, 0, 1, 1, 0, 1]
 				
 				//TODO: canvasMark fails when I enable clipping on drawImage
-				//_this.__prepare_clip();				
+				_this.__prepare_clip();				
 				_this._draw_shadow(matrix, temp_z_index, function() {	
+					gl.activeTexture(gl.TEXTURE4);
+					gl.bindTexture(gl.TEXTURE_2D, _this.imageTexture);	
 					gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);				
 					gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(points), gl.STATIC_DRAW);
 					gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
 				});
 				temp_z_index -= EPSILON;
 
+				gl.activeTexture(gl.TEXTURE4);
+				gl.bindTexture(gl.TEXTURE_2D, _this.imageTexture);	
+				
 				matrix = matrixMultiply(matrix, _this.projectionMatrix);
 				gl.uniformMatrix4fv(program.transformLocation, false, matrix);
 				gl.uniform1f(program.globalAlphaLocation, _this.globalAlpha);
 				
-
 				gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);
 				gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);	
 				gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(points), gl.STATIC_DRAW);
@@ -2611,7 +2606,7 @@
 				gl.uniform1f(program.zindexLocation, temp_z_index);
 				gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);	
 				
-				//_this.__execute_clip(temp_z_index)
+				_this.__execute_clip(temp_z_index)
 				temp_z_index -= EPSILON;
 			}
 			
