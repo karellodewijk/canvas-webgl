@@ -1019,6 +1019,8 @@
 		
 		program.positionLocation = gl.getAttribLocation(program, "a_position");
 		program.vertexBuffer = gl.createBuffer();
+		program.indexBuffer = gl.createBuffer();
+		
 		gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);
 		gl.enableVertexAttribArray(program.positionLocation);
 		gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);
@@ -1038,6 +1040,7 @@
 
 		program.positionLocation = gl.getAttribLocation(program, "a_position");
 		program.vertexBuffer = gl.createBuffer();
+		program.indexBuffer = gl.createBuffer();
 		gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);
 		gl.enableVertexAttribArray(program.positionLocation);
 		gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);	
@@ -1061,6 +1064,7 @@
 		
 		program.positionLocation = gl.getAttribLocation(program, "a_position");
 		program.vertexBuffer = gl.createBuffer();
+		program.indexBuffer = gl.createBuffer();
 		gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);
 		gl.enableVertexAttribArray(program.positionLocation);
 		gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);	
@@ -1083,6 +1087,7 @@
 
 		program.positionLocation = gl.getAttribLocation(program, "a_position");
 		program.vertexBuffer = gl.createBuffer();
+		program.indexBuffer = gl.createBuffer();
 		gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);
 		gl.enableVertexAttribArray(program.positionLocation);
 		gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);	
@@ -1107,6 +1112,7 @@
 
 		program.positionLocation = gl.getAttribLocation(program, "a_position");
 		program.vertexBuffer = gl.createBuffer();
+		program.indexBuffer = gl.createBuffer();
 		gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);
 		gl.enableVertexAttribArray(program.positionLocation);
 		gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);			
@@ -1123,6 +1129,7 @@
 
 		program.positionLocation = gl.getAttribLocation(program, "a_position");
 		program.vertexBuffer = gl.createBuffer();
+		program.indexBuffer = gl.createBuffer();
 		gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);
 		gl.enableVertexAttribArray(program.positionLocation);
 		gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);	
@@ -1145,6 +1152,7 @@
 		
 		program.positionLocation = gl.getAttribLocation(program, "a_position");
 		program.vertexBuffer = gl.createBuffer();
+		program.indexBuffer = gl.createBuffer();
 		gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);
 		gl.enableVertexAttribArray(program.positionLocation);
 		gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);	
@@ -1168,6 +1176,7 @@
 		
 		program.positionLocation = gl.getAttribLocation(program, "a_position");
 		program.vertexBuffer = gl.createBuffer();
+		program.indexBuffer = gl.createBuffer();
 		gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);
 		gl.enableVertexAttribArray(program.positionLocation);
 		gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);	
@@ -1188,6 +1197,7 @@
 
 		program.positionLocation = gl.getAttribLocation(program, "a_position");
 		program.vertexBuffer = gl.createBuffer();
+		program.indexBuffer = gl.createBuffer();
 		gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);
 		gl.enableVertexAttribArray(program.positionLocation);
 		gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);	
@@ -1969,7 +1979,8 @@
 				program = this._select_program(this.simple_program);
 				gl.uniform4fv(program.colorLocation, this.fillStyleRGBA);
 			}
-			
+			var vertices = [];
+			var indices = []
 			for (var i in _path.paths) {
 				var currentPath = _path.paths[i];
 				var closed = currentPath[0] == currentPath[currentPath.length-2] && currentPath[1] == currentPath[currentPath.length-1];			
@@ -1977,41 +1988,45 @@
 					currentPath.push(currentPath[0],  currentPath[1]);
 				}
 				var triangles = earcut(currentPath);
-
-				var data = []				
-				for (var i = 0; i < triangles.length; i+=3) {
-					data.push(currentPath[triangles[i]*2], currentPath[triangles[i]*2+1]);
-					data.push(currentPath[triangles[i+1]*2], currentPath[triangles[i+1]*2+1]);
-					data.push(currentPath[triangles[i+2]*2], currentPath[triangles[i+2]*2+1]);
+				var offset = vertices.length;
+				for (var j in triangles) {
+					indices.push(offset+triangles[j]);
 				}
-
+				vertices = vertices.concat(currentPath);
 				if (!closed) {
 					currentPath.pop();
 					currentPath.pop();
 				}
-								
-				var _this = this;
-				
-				this._draw_shadow(this._transform, this.currentZIndex, function() {	
-					gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);				
-					gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW);
-					gl.drawArrays(gl.TRIANGLES, 0, data.length/2);
-				});
-				this.currentZIndex -=EPSILON;
-
-				var transform = matrixMultiply(this._transform, this.projectionMatrix);
-				gl.uniformMatrix4fv(program.transformLocation, false, transform);
-				this._set_zindex();
-				gl.uniform1f(program.globalAlphaLocation, this.globalAlpha);
-				
-				this.__prepare_clip();
-				gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);
-				gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW);
-				gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);	
-				gl.drawArrays(gl.TRIANGLES, 0, data.length/2);
-				this.__execute_clip(this.currentZIndex)
-				this.currentZIndex -=EPSILON;
 			}
+			
+			var _this = this;		
+			this._draw_shadow(this._transform, this.currentZIndex, function() {	
+				gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);					
+				gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+				gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, program.indexBuffer);
+				gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);	
+				gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);
+				gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, program.indexBuffer);
+				gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
+			});
+			this.currentZIndex -=EPSILON;
+
+			var transform = matrixMultiply(this._transform, this.projectionMatrix);
+			gl.uniformMatrix4fv(program.transformLocation, false, transform);
+			this._set_zindex();
+			gl.uniform1f(program.globalAlphaLocation, this.globalAlpha);
+			
+			this.__prepare_clip();	
+			gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);					
+			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, program.indexBuffer);
+			gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);	
+			gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);
+			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, program.indexBuffer);
+			gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
+			this.__execute_clip(this.currentZIndex)
+			this.currentZIndex -=EPSILON;
+			
 		},
 		fillRect(x, y, width, height) {
 			var gl = this.gl;			
@@ -2082,9 +2097,9 @@
 			}
 
 			if (use_linedash) {
-				var to_draw_or_not_to_draw, new_array;
-				[new_array, to_draw_or_not_to_draw] = this._prepare_line_dash(array, closed, lineWidthDiv2);
-				array = new_array;
+				var result = this._prepare_line_dash(array, closed, lineWidthDiv2);
+				to_draw_or_not_to_draw = result[1];
+				array = result[0];
 			}
 			
 			var triangle_buffer = [];
