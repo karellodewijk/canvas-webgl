@@ -411,7 +411,12 @@
 	
 	var CanvasPattern = function(image, repetition) {
 		this.image = image;
-		this.repetition = repetition;
+		if (repetition === null || repetition == "") {
+			this.repetition = 'repeat';
+		} else {
+			this.repetition = repetition;
+		}
+		this.thisImplementsCanvasPattern = true;
 	}
 	
 	CanvasPattern.prototype = {
@@ -454,7 +459,13 @@
 			gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);				
 			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(points), gl.STATIC_DRAW);
 			
-			var iw = this.image.naturalWidth, ih = this.image.naturalHeight; 
+			var iw, ih;
+			if (this.image instanceof HTMLImageElement) {
+				iw = this.image.naturalWidth; ih = this.image.naturalHeight; 
+			} else {
+				iw = this.image.width; ih = this.image.height;
+			}
+			
 			if (this.repetition == 'repeat-x') {
 				height =  ih;
 			} else if (this.repetition == 'repeat-y') {
@@ -463,6 +474,8 @@
 				width = iw;
 				height =  ih;
 			}				
+						
+			console.log(this.image)
 						
 			if (iw > 0 && ih > 0) {
 				for (var x=0; x < width; x+=iw) {
@@ -2588,7 +2601,7 @@
 				gl.activeTexture(gl.TEXTURE4);
 				gl.bindTexture(gl.TEXTURE_2D, _this.imageTexture);	
 				
-				if (img.width <= 4096 && img.height <= 4096) {	
+				if (img_width <= 4096 && img_height <= 4096) {	
 					gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
 				} else {
 					console.warn("Texture too large >4096px. using canvas fallback.");
