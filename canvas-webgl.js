@@ -359,6 +359,11 @@
 		return  [m[0] * v[0] + m[1] * v[1] + m[12],
 				 m[4] * v[0] + m[5] * v[1] + m[13]];
 	}
+	
+	function vectSvgTransform(m, v) {
+		return  [m.a * v[0] + m.c * v[1] + m.e,
+				 m.b * v[0] + m.d * v[1] + m.f];
+	}
 
 	function _add_arc(triangle_buffer, x, y, radius, startAngle, endAngle, anticlockwise) {
 		//bring angles all in [0, 2*PI] range
@@ -757,8 +762,15 @@
 			for (var i in paths) {
 				var path = paths[i];
 				var new_path = [];
-				for (var j in path)
-					new_path.push(path[j]); //TODO: * transform
+				if (!(typeof transform === undefined)) {
+					for (var j = 0; j < path.length; j+=2) {
+						var point_tranformed = vectSvgTransform(transform, [path[j], path[j+1]]);
+						new_path.push(point_tranformed[0], point_tranformed[1]);
+					}
+				} else {
+					for (var j in path)
+						new_path.push(path[j]);
+				}
 				this.paths.push(new_path);
 				this.closed.push(paths.closed[i]);
 			}
