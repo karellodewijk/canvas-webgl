@@ -1766,14 +1766,20 @@
 			switch(new_globcomp) {
 				case 'source-over':
 					gl.blendEquation(gl.FUNC_ADD);
-					gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+					gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);					
 					break;
 				case 'copy':
 					gl.blendEquation(gl.FUNC_ADD);
 					gl.blendFunc(gl.ONE, gl.ZERO);
 					break;
+				default:
+				    return; //couldn't find it, so don't change it
 			}
+			this._globalCompositeOperation = new_globcomp;
 			
+		},
+		get globalCompositeOperation() {
+			return this._globalCompositeOperation;
 		},
 		get fillStyle() {
 			return this._fillStyle;
