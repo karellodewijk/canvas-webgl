@@ -106,7 +106,7 @@ if (typeof Arena == "undefined" || !Arena)
             {
                var width = size << 1;
                buffer.width = buffer.height = width;
-               var ctx = buffer.getContext('2d');
+               var ctx = buffer.getContext('webgl-2d');
                var radgrad = ctx.createRadialGradient(size, size, size >> 1, size, size, size);  
                radgrad.addColorStop(0, colour);
                radgrad.addColorStop(1, "#000");
@@ -146,7 +146,7 @@ if (typeof Arena == "undefined" || !Arena)
             {
                var width = size << 1;
                buffer.width = buffer.height = width;
-               var ctx = buffer.getContext('2d');
+               var ctx = buffer.getContext('webgl-2d');
                var radgrad = ctx.createRadialGradient(size, size, size >> 3, size, size, size);  
                radgrad.addColorStop(0, "rgb(255,125,50)");
                radgrad.addColorStop(1, "#000");
@@ -162,7 +162,7 @@ if (typeof Arena == "undefined" || !Arena)
             var imgs = [];
             var size = 40;
             buffer.width = buffer.height = size;
-            var ctx = buffer.getContext('2d');
+            var ctx = buffer.getContext('webgl-2d');
             
             // draw bullet primary weapon
             var rf = function(width, height)

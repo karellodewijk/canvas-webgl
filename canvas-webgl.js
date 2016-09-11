@@ -731,12 +731,14 @@
 			return texture;				
 		}
 	}
+
+	var ImageData = function() {}
 	
 	var Path2D = function() {
 		this.paths = [[]];
 		this.closed = [false];
 	}
-	
+
 	Path2D.prototype = {
 		addPath(paths, transform) {
 			for (var i in paths) {
@@ -1366,13 +1368,12 @@
 		},
 		getImageData(sx, sy, sw, sh) {
 			var gl = this.gl;
-			var data = {
-				width: sw,
-				height: sh,
-				data: new Uint8Array(sw * sh * 4)
-			};
+			
+			var data = this.createImageData(sw, sh)
+			
 			var buffer = new Uint8Array(sw * sh * 4);
 			gl.readPixels(sx, this.height-sh-sy, sw, sh, gl.RGBA, gl.UNSIGNED_BYTE, buffer);
+			
 			//reverse rows
 			for (var i = 0; i < sh; i++) {
 				for (var j = 0; j < sw; j++) {
@@ -1408,15 +1409,15 @@
 				}
 			} else {
 				//we can just use it directly				
-				if (!(buffer instanceof Uint8Array)) {
+				if (!(imagedata.data instanceof Uint8Array)) {
 					buffer = new Uint8Array(imagedata.data);
 				} else {
 					buffer = imagedata.data;
 				}
-			}
-			
+			}					
+
 			var program = this._select_program(this.direct_texture_program);
-						
+					
 			var texture = gl.createTexture();
 			gl.bindTexture(gl.TEXTURE_2D, texture);
 			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -1426,6 +1427,7 @@
 			
 			var transform = matrixMultiply(this._transform, this.projectionMatrix);
 			gl.uniformMatrix4fv(program.transformLocation, false, transform);
+						
 			gl.uniform1f(program.globalAlphaLocation, this.globalAlpha);
 			this._set_zindex();
 			
@@ -1442,14 +1444,15 @@
 		},
 		createImageData(width, height) {
 			if (height === undefined) {
-				height = width.height;
-				width = width.width;
+				height = this.height;
+				width = this.width;
 			}
-			var data = {
-				width: width,
-				height: height,
-				data: new Uint8Array(width * height * 4)
-			};			
+			
+			var data = new ImageData();
+			data.data = new Uint8ClampedArray(width * height * 4);
+			data.width = width;
+			data.height = height;
+			
 			return data;
 		},
 		_set_zindex() {

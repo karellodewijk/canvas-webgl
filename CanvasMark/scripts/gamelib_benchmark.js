@@ -267,7 +267,7 @@ Game.worldToScreen = function worldToScreen(vector, world, radiusx, radiusy)
          }
          
          // get canvas context for a render pass
-         var ctx = GameHandler.canvas.getContext('2d');
+         var ctx = GameHandler.canvas.getContext('webgl-2d');
          
          // calculate viewport transform and offset against the world
          // we want to show a fixed number of world units in our viewport
