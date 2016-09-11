@@ -26,9 +26,10 @@ Caveats:
 
 Missing features:
 
-- hit regions
+- Hit regions except isPointInPath/isPointInStroke
 - drawFocusIfNeeded, scrollPathIntoView
-- ellipse support in arcTo
+- Ellipse support in arcTo
+- There is only 1 winding mode, which is whatever earcut does.
 
 Used libraries:
 
