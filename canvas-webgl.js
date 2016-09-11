@@ -1761,6 +1761,7 @@
 			
 			return [new_path, to_draw_or_not_to_draw];
 		},
+		
 		set globalCompositeOperation(new_globcomp) {
 			var gl = this.gl;
 			switch(new_globcomp) {
@@ -1771,6 +1772,10 @@
 				case 'copy':
 					gl.blendEquation(gl.FUNC_ADD);
 					gl.blendFunc(gl.ONE, gl.ZERO);
+					break;
+				case 'lighter': //works
+					gl.blendEquation(gl.FUNC_ADD);
+					gl.blendFuncSeparate(gl.ONE, gl.ONE, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 					break;
 				default:
 				    return; //couldn't find it, so don't change it
