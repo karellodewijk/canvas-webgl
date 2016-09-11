@@ -26,7 +26,6 @@ Caveats:
 
 Missing features:
 
-- globalCompositeOperation
 - hit regions
 - drawFocusIfNeeded, scrollPathIntoView
 - ellipse support in arcTo

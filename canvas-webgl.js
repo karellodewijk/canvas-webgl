@@ -1209,8 +1209,7 @@
 		
 		//init some other random webgl stuff
 		gl.enable(gl.DEPTH_TEST);
-		gl.depthFunc(gl.LESS);
-		
+		gl.depthFunc(gl.LESS);		
 		gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 		gl.enable(gl.BLEND);
 
@@ -1510,8 +1509,6 @@
 			
 			for (var i in _path.paths) {		
 				var currentPath = _path.paths[i];
-				console.log(currentPath)
-				
 				var transformedPath = [];
 				
 				for (var j = 0; j < currentPath.length; j+=2) {
@@ -1530,8 +1527,6 @@
 					this.clipPlane.push(transformedPath[triangles[i+1]*2], transformedPath[triangles[i+1]*2+1]);
 					this.clipPlane.push(transformedPath[triangles[i+2]*2], transformedPath[triangles[i+2]*2+1]);
 				}
-				
-				console.log(this.clipPlane)
 			}
 		},
 		resetClip() {
@@ -1765,6 +1760,20 @@
 			}
 			
 			return [new_path, to_draw_or_not_to_draw];
+		},
+		set globalCompositeOperation(new_globcomp) {
+			var gl = this.gl;
+			switch(new_globcomp) {
+				case 'source-over':
+					gl.blendEquation(gl.FUNC_ADD);
+					gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+					break;
+				case 'copy':
+					gl.blendEquation(gl.FUNC_ADD);
+					gl.blendFunc(gl.ONE, gl.ZERO);
+					break;
+			}
+			
 		},
 		get fillStyle() {
 			return this._fillStyle;

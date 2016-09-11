@@ -4,8 +4,8 @@ function test_webgl(test) {
 	canvas.width = 300;
 	canvas.height = 300;
 	ctx = canvas.getContext('webgl-2d');
-	document.body.appendChild(canvas);
 	test(ctx);
+	document.body.appendChild(canvas);
 }
 
 function test_canvas(test) {
@@ -14,8 +14,8 @@ function test_canvas(test) {
 	canvas.width = 300;
 	canvas.height = 300;
 	ctx = canvas.getContext('2d');
-	document.body.appendChild(canvas);
 	test(ctx);
+	document.body.appendChild(canvas);
 }
 
 function do_test(test) {
@@ -25,18 +25,20 @@ function do_test(test) {
 }
 
 window.onload = function() {
-	do_test(function(ctx) {
-		//ctx.shadowBlur = 10;
-		
-		ctx.translate(2,2);
-		ctx.rect(5,5,30,30);
-		ctx.clip();
-		
-		ctx.resetTransform();
-		ctx.beginPath();
-		ctx.rect(5,5,30,30);
-		ctx.stroke()
-		//var image = document.getElementById("source");
-		//ctx.drawImage(image, 33, 71, 104, 124, 21, 20, 87, 104);
-	});
+	var img1 = document.getElementById("orig");
+	var img2 = document.getElementById("cover");
+
+	function test_comp(comp) {
+		var title = document.createElement('h2');
+		title.innerHTML = comp
+		document.body.appendChild(title)
+		do_test(function(ctx) {
+			ctx.globalCompositeOperation = comp;
+			ctx.drawImage(img1, 0, 0);
+			ctx.drawImage(img2, 0, 0);
+		});
+	} 
+	
+	test_comp('source-over') //works
+	test_comp('copy') //works
 }
