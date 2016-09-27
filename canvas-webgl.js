@@ -233,65 +233,6 @@
 		}
 	`
 	
-	var linedash_draw_vertex_shader = `
-		attribute vec2 a_position;
-		attribute float a_draw;
-		uniform float u_zindex;
-		uniform mat4 u_matrix;
-		
-		varying float v_alpha;
-
-		void main() {
-		  gl_Position = u_matrix * vec4(a_position, u_zindex, 1);
-		  v_alpha = a_draw;
-		}
-	`
-	
-	var linedash_draw_fragment_shader = `	
-		precision mediump float;
-
-		uniform vec4 u_color;
-		uniform float u_global_alpha;
-		varying float v_alpha;
-		
-
-		void main() {
-		   gl_FragColor = v_alpha * vec4(u_color.xyz, u_color.w * u_global_alpha);
-		}
-	`
-	
-	var linedash_texture_draw_vertex_shader = `
-		attribute vec2 a_position;
-		attribute float a_draw;
-		uniform float u_zindex;
-		uniform mat4 u_matrix;
-		
-		varying float v_alpha;
-		varying vec2 v_texcoord;
-
-		void main() {
-		  gl_Position = u_matrix * vec4(a_position, u_zindex, 1);
-		  v_texcoord = 0.5 * (gl_Position.xy + 1.0); //-1,1 -> 0,1
-		  v_alpha = a_draw;
-		}
-	`
-	
-	var linedash_texture_draw_fragment_shader = `	
-		precision mediump float;
-		uniform sampler2D texture;
-		
-		varying float v_alpha;
-		varying vec2 v_texcoord;
-		uniform float u_global_alpha;
-
-		void main() {
-		   gl_FragColor = v_alpha * texture2D(texture, v_texcoord);
-		   gl_FragColor.w *= u_global_alpha;
-		}
-	`
-	
-	
-	
 	function matrixMultiply(a, b) {
 	  return[ a[0]  * b[0] + a[1]  * b[4]  + a[2]  * b[8]  + a[3]  * b[12], //0,0
 	          a[0]  * b[1] + a[1]  * b[5]  + a[2]  * b[9]  + a[3]  * b[13], //0,1
@@ -1008,12 +949,8 @@
 		this.circle_program = create_program(simple_draw_vertex_shader, circle_gradient_fragment_shader)
 		//used for loading images
 		this.image_program = create_program(image_draw_vertex_shader, image_draw_fragment_shader);
-		//used for stroke with a linedash pattern
-		this.linedash_program = create_program(linedash_draw_vertex_shader, linedash_draw_fragment_shader);
 		//applies guassian blur
 		this.shadow_program = create_program(shadow_vertex_shader, shadow_fragment_shader);	
-		//used for stroke with a linedash pattern and a texture
-		this.linedash_texture_program = create_program(linedash_texture_draw_vertex_shader, linedash_texture_draw_fragment_shader);
 		//Accepts texture and location positions and maps them
 		this.direct_texture_program = create_program(direct_texture_draw_vertex_shader, texture_draw_fragment_shader);	
 
@@ -1042,57 +979,7 @@
 		
 		gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);
 		gl.enableVertexAttribArray(program.positionLocation);
-		gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);
-	
-		//init linedash program
-		program = this.linedash_program;
-		gl.useProgram(this.linedash_program);
-		
-		program.colorLocation = gl.getUniformLocation(program, "u_color");
-		gl.uniform4f(program.colorLocation, 0, 0, 0, 1);
-		program.zindexLocation = gl.getUniformLocation(program, "u_zindex");
-		program.globalAlphaLocation = gl.getUniformLocation(program, "u_global_alpha");
-		gl.uniform1f(program.globalAlphaLocation, this.globalAlpha);
-		
-		program.transformLocation = gl.getUniformLocation(program, "u_matrix");
-		gl.uniformMatrix4fv(program.transformLocation, false, this.projectionMatrix);
-
-		program.positionLocation = gl.getAttribLocation(program, "a_position");
-		program.vertexBuffer = gl.createBuffer();
-		program.indexBuffer = gl.createBuffer();
-		gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);
-		gl.enableVertexAttribArray(program.positionLocation);
 		gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);	
-		
-		program.toDrawLocation = gl.getAttribLocation(program, "a_draw");
-		program.toDrawBuffer = gl.createBuffer();
-		gl.bindBuffer(gl.ARRAY_BUFFER, program.toDrawBuffer);
-		gl.enableVertexAttribArray(program.toDrawLocation);
-		gl.vertexAttribPointer(program.toDrawLocation, 1, gl.FLOAT, false, 0, 0);
-
-		//init linedash with texture program
-		program = this.linedash_texture_program;
-		gl.useProgram(this.linedash_texture_program);
-		
-		program.textureLocation = gl.getUniformLocation(program, "texture");	
-		program.zindexLocation = gl.getUniformLocation(program, "u_zindex");		
-		program.globalAlphaLocation = gl.getUniformLocation(program, "u_global_alpha");
-		gl.uniform1f(program.globalAlphaLocation, this.globalAlpha);
-		program.transformLocation = gl.getUniformLocation(program, "u_matrix");
-		gl.uniformMatrix4fv(program.transformLocation, false, this.projectionMatrix);
-		
-		program.positionLocation = gl.getAttribLocation(program, "a_position");
-		program.vertexBuffer = gl.createBuffer();
-		program.indexBuffer = gl.createBuffer();
-		gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);
-		gl.enableVertexAttribArray(program.positionLocation);
-		gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);	
-		
-		program.toDrawLocation = gl.getAttribLocation(program, "a_draw");
-		program.toDrawBuffer = gl.createBuffer();
-		gl.bindBuffer(gl.ARRAY_BUFFER, program.toDrawBuffer);
-		gl.enableVertexAttribArray(program.toDrawLocation);
-		gl.vertexAttribPointer(program.toDrawLocation, 1, gl.FLOAT, false, 0, 0);		
 		
 		//init gradient draw program
 		program = this.gradient_program;
@@ -1510,7 +1397,8 @@
 			}	
 			for (var i in _path.paths) {
 				var currentPath = _path.paths[i];
-				this.__strokePath(this.path.paths[i], _path.closed[i]);
+				if (currentPath.length > 2)
+					this.__strokePath(this.path.paths[i], _path.closed[i]);
 			}
 		},
 		clip(path) {
@@ -2327,45 +2215,14 @@
 			//select the right program
 			var program;
 			if (this.strokeStyleRGBA instanceof WebGLTexture) {
-				if (use_linedash) {
-					program = this._select_program(this.linedash_texture_program);
-				} else {
-					program = this._select_program(this.texture_program);
-				}				
+				program = this._select_program(this.texture_program);			
 				gl.activeTexture(gl.TEXTURE2);
 				gl.bindTexture(gl.TEXTURE_2D, this.strokeStyleRGBA);
 				gl.uniform1i(program.textureLocation, 2);
 			} else {
-				if (use_linedash) {
-					program = this._select_program(this.linedash_program);
-				} else {
-					program = this._select_program(this.simple_program);
-				}	
+				program = this._select_program(this.simple_program);	
 				gl.uniform4fv(program.colorLocation, this.strokeStyleRGBA);
 			}
-			
-			/*
-			if (!use_linedash && this.lineWidth == 1) {
-				//used only for linewidth == 1
-				var closed_but_not_finished = (closed && (array[0] != array[array.length-2] || array[1] != array[array.length-1]));
-				if (closed_but_not_finished) {
-					array.push(array[0], array[1]);
-				}
-				var transform = matrixMultiply(this._transform, this.projectionMatrix);
-				gl.uniformMatrix4fv(program.transformLocation, false, transform);
-				gl.uniform1f(program.globalAlphaLocation, this.globalAlpha);
-				this._set_zindex();
-				gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);
-				gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);	
-				gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(array), gl.STATIC_DRAW);
-				gl.drawArrays(gl.LINE_STRIP, 0, array.length/2);
-				if (closed_but_not_finished) {
-					array.pop();
-					array.pop();
-				}
-				return;
-			}
-			*/
 			
 			var lineWidthDiv2 = this.lineWidth / 2.0;
 			
@@ -2373,75 +2230,49 @@
 			var triangle_buffer = result[0];
 			var to_draw_buffer = result[1];
 			
-			var len = triangle_buffer.length/2;			
+			var len = triangle_buffer.length/2;
 			
+			var indices = [];
 			if (use_linedash) {
-				//this algrotithm doubles any 2 vertices every time the dash pattern changes
-				//Once with the dash value of the previous piece of line and once with the dash
-				//value of the next piece of line. 
-				
-				var new_triangle_buffer = []
-				var new_to_draw_buffer = []
-				var draw = to_draw_buffer[0]
-				
-				var j = 0;
-				while (true) {
-					while (draw == to_draw_buffer[j]) {
-						new_triangle_buffer.push(triangle_buffer[2*j], triangle_buffer[2*j+1]);
-						new_to_draw_buffer.push(draw);
-						j++;
-					}		
-					if (j == to_draw_buffer.length) break;
-				
-					new_triangle_buffer.push(triangle_buffer[2*j], triangle_buffer[2*j+1]);
-					new_to_draw_buffer.push(draw);
-					new_triangle_buffer.push(triangle_buffer[2*j+2], triangle_buffer[2*j+3]);
-					new_to_draw_buffer.push(draw);
-					
-					if (draw) draw = 0; else draw = 1;
-					new_triangle_buffer.push(triangle_buffer[2*j], triangle_buffer[2*j+1]);
-					new_to_draw_buffer.push(draw);					
-					j++;
+				for (var i = 2; i < triangle_buffer.length/2; i+=2) {
+					if (to_draw_buffer[i-1]) {
+						indices.push(i-2, i , i-1, i, i+1, i-1);
+					}
 				}
-				
-				len = new_triangle_buffer.length/2;
-				
-				triangle_buffer = new_triangle_buffer;
-				to_draw_buffer = new_to_draw_buffer;
+			} else {							
+				for (var i = 2; i < triangle_buffer.length/2; i+=2) {
+					indices.push(i-2, i , i-1, i, i+1, i-1);
+				}
 			}
 				
 			this.__prepare_clip();
 			var _this = this;
 			this._draw_shadow(this._transform, this.currentZIndex, function() {
-				if (use_linedash) {
-					gl.bindBuffer(gl.ARRAY_BUFFER, program.toDrawBuffer);
-					gl.vertexAttribPointer(program.toDrawLocation, 1, gl.FLOAT, false, 0, 0);	
-					gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(to_draw_buffer), gl.STATIC_DRAW);
-				}			
-				gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);
-				gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);	
+				gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);					
 				gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(triangle_buffer), gl.STATIC_DRAW);
-				gl.drawArrays(gl.TRIANGLE_STRIP, 0, len);
+				gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, program.indexBuffer);
+				gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);	
+				gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);
+				gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, program.indexBuffer);
+				gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
 			});
+
 			this.currentZIndex -= EPSILON;
-			
 			var transform = matrixMultiply(this._transform, this.projectionMatrix);
 			gl.uniformMatrix4fv(program.transformLocation, false, transform);
 			gl.uniform1f(program.globalAlphaLocation, this.globalAlpha);
 			this._set_zindex();
 			
-			
-			if (use_linedash) {
-				gl.bindBuffer(gl.ARRAY_BUFFER, program.toDrawBuffer);
-				gl.vertexAttribPointer(program.toDrawLocation, 1, gl.FLOAT, false, 0, 0);	
-				gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(to_draw_buffer), gl.STATIC_DRAW);
-			}
-			gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);
-			gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);	
+			gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);					
 			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(triangle_buffer), gl.STATIC_DRAW);
-			gl.drawArrays(gl.TRIANGLE_STRIP, 0, len);
+			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, program.indexBuffer);
+			gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);	
+			gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);
+			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, program.indexBuffer);
+			gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
+			
 			this.__execute_clip(this.currentZIndex)
-			this.currentZIndex -=EPSILON;
+			this.currentZIndex -= EPSILON;
 		},
 		strokeRect(x, y, width, height) {
 			var gl = this.gl;

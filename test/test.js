@@ -26,11 +26,12 @@ function do_test(test) {
 
 window.onload = function() {
 	do_test(function(ctx) {
-		ctx.fillStyle = '#f00';
-		ctx.fillRect(0, 0, 100, 50);
-		var img = document.getElementById('green-1x1.png');
-		var pattern = ctx.createPattern(img, "");
-		ctx.fillStyle = pattern;
-		ctx.fillRect(0, 0, 200, 50);
+		ctx.setLineDash([4, 16]);
+		ctx.lineDashOffset = 2;
+
+		ctx.beginPath();
+		ctx.moveTo(0,100);
+		ctx.lineTo(400, 100);
+		ctx.stroke();
 	});
 }
