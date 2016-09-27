@@ -293,23 +293,6 @@
 	
 	
 	function matrixMultiply(a, b) {
-	  /*	
-	  return[ a[0*4 + 0] * b[0*4 + 0] + a[0*4 + 1] * b[1*4 + 0] + a[0*4 + 2] * b[2*4 + 0] + a[0*4 + 3] * b[3*4 + 0], //0,0
-	          a[0*4 + 0] * b[0*4 + 1] + a[0*4 + 1] * b[1*4 + 1] + a[0*4 + 2] * b[2*4 + 1] + a[0*4 + 3] * b[3*4 + 1], //0,1
-			  a[0*4 + 0] * b[0*4 + 2] + a[0*4 + 1] * b[1*4 + 2] + a[0*4 + 2] * b[2*4 + 2] + a[0*4 + 3] * b[3*4 + 2], //0,2
-			  a[0*4 + 0] * b[0*4 + 3] + a[0*4 + 1] * b[1*4 + 3] + a[0*4 + 2] * b[2*4 + 3] + a[0*4 + 3] * b[3*4 + 3], //0,3		
-			  a[1*4 + 0] * b[0*4 + 0] + a[1*4 + 1] * b[1*4 + 0] + a[1*4 + 2] * b[2*4 + 0] + a[1*4 + 3] * b[3*4 + 0], //1,0
-			  a[1*4 + 0] * b[0*4 + 1] + a[1*4 + 1] * b[1*4 + 1] + a[1*4 + 2] * b[2*4 + 1] + a[1*4 + 3] * b[3*4 + 1], //1,1
-			  a[1*4 + 0] * b[0*4 + 2] + a[1*4 + 1] * b[1*4 + 2] + a[1*4 + 2] * b[2*4 + 2] + a[1*4 + 3] * b[3*4 + 2], //1,2
-			  a[1*4 + 0] * b[0*4 + 3] + a[1*4 + 1] * b[1*4 + 3] + a[1*4 + 2] * b[2*4 + 3] + a[1*4 + 3] * b[3*4 + 3], //1,3
-			  a[2*4 + 0] * b[0*4 + 0] + a[2*4 + 1] * b[1*4 + 0] + a[2*4 + 2] * b[2*4 + 0] + a[2*4 + 3] * b[3*4 + 0], //2,0
-			  a[2*4 + 0] * b[0*4 + 1] + a[2*4 + 1] * b[1*4 + 1] + a[2*4 + 2] * b[2*4 + 1] + a[2*4 + 3] * b[3*4 + 1], //2,1
-			  a[2*4 + 0] * b[0*4 + 2] + a[2*4 + 1] * b[1*4 + 2] + a[2*4 + 2] * b[2*4 + 2] + a[2*4 + 3] * b[3*4 + 2], //2,2
-			  a[2*4 + 0] * b[0*4 + 3] + a[2*4 + 1] * b[1*4 + 3] + a[2*4 + 2] * b[2*4 + 3] + a[2*4 + 3] * b[3*4 + 3], //2,3
-			  a[3*4 + 0] * b[0*4 + 0] + a[3*4 + 1] * b[1*4 + 0] + a[3*4 + 2] * b[2*4 + 0] + a[3*4 + 3] * b[3*4 + 0], //3,0
-			  a[3*4 + 0] * b[0*4 + 1] + a[3*4 + 1] * b[1*4 + 1] + a[3*4 + 2] * b[2*4 + 1] + a[3*4 + 3] * b[3*4 + 1], //3,1
-			  a[3*4 + 0] * b[0*4 + 2] + a[3*4 + 1] * b[1*4 + 2] + a[3*4 + 2] * b[2*4 + 2] + a[3*4 + 3] * b[3*4 + 2], //3,2
-			  a[3*4 + 0] * b[0*4 + 3] + a[3*4 + 1] * b[1*4 + 3] + a[3*4 + 2] * b[2*4 + 3] + a[3*4 + 3] * b[3*4 + 3] ]//3,3 */
 	  return[ a[0]  * b[0] + a[1]  * b[4]  + a[2]  * b[8]  + a[3]  * b[12], //0,0
 	          a[0]  * b[1] + a[1]  * b[5]  + a[2]  * b[9]  + a[3]  * b[13], //0,1
 			  a[0]  * b[2] + a[1]  * b[6]  + a[2]  * b[10] + a[3]  * b[14], //0,2
@@ -479,9 +462,7 @@
 				width = iw;
 				height =  ih;
 			}				
-						
-			console.log(this.image)
-						
+
 			if (iw > 0 && ih > 0) {
 				for (var x=0; x < width; x+=iw) {
 					for (var y=0; y < height; y+=ih) {				
@@ -643,13 +624,10 @@
 					tmin = Math.max(tmin, Math.min(ty1, ty2));
 					tmax = Math.min(tmax, Math.max(ty1, ty2));
 				}
-				if (tmax > tmin) { //tmin != tmax is technically an intersection in the corner, but we don't need that
+				if (tmax >= tmin) { //tmin != tmax is technically an intersection in the corner, but we don't need that
 					var s1 = [p[0] + tmin * v[0], p[1] + tmin * v[1]]
 					var s2 = [p[0] + tmax * v[0], p[1] + tmax * v[1]]
 					return [s1, s2];
-				} else if (tmax == tmin) {
-					var s = [p[0] + tmin * v[0], p[1] + tmin * v[1]]
-					return [s];
 				} else {
 					return [];
 				}
@@ -690,10 +668,19 @@
 					comp = a[0] - b[0]
 					if (comp != 0) return comp;	
 					else {
-						return a[1] - b[2]
+						return a[1] - b[1]
 					}
 				}
 			});
+			
+			//make all points unique
+			var unique = [intersections[0]];
+			for (var i = 1; i < intersections.length; i++) {
+				if (intersections[i][0] != intersections[i-1][0] || intersections[i][1] != intersections[i-1][1]) {
+					unique.push(intersections[i]);
+				}
+			}
+			intersections = unique;
 			
 			//the result here is that from a bunch of corners and intersection points, we've built something we can
 			//draw as a gl.TRIANGLE_STRIP.
