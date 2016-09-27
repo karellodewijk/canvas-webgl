@@ -1395,11 +1395,58 @@
 			if(path) {  
 				_path = path;
 			}	
+			
+			var gl = this.gl;
+			//select the right program
+			var program;
+			if (this.strokeStyleRGBA instanceof WebGLTexture) {
+				program = this._select_program(this.texture_program);			
+				gl.activeTexture(gl.TEXTURE2);
+				gl.bindTexture(gl.TEXTURE_2D, this.strokeStyleRGBA);
+				gl.uniform1i(program.textureLocation, 2);
+			} else {
+				program = this._select_program(this.simple_program);	
+				gl.uniform4fv(program.colorLocation, this.strokeStyleRGBA);
+			}
+			
+			var vertices = [];
+			var indices = [];
+			
 			for (var i in _path.paths) {
 				var currentPath = _path.paths[i];
 				if (currentPath.length > 2)
-					this.__strokePath(this.path.paths[i], _path.closed[i]);
+					this.__strokePath(currentPath, _path.closed[i], vertices, indices);
 			}
+			
+			this.__prepare_clip();
+			var _this = this;
+			this._draw_shadow(this._transform, this.currentZIndex, function() {
+				gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);					
+				gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+				gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, program.indexBuffer);
+				gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);	
+				gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);
+				gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, program.indexBuffer);
+				gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
+			});
+
+			this.currentZIndex -= EPSILON;
+			var transform = matrixMultiply(this._transform, this.projectionMatrix);
+			gl.uniformMatrix4fv(program.transformLocation, false, transform);
+			gl.uniform1f(program.globalAlphaLocation, this.globalAlpha);
+			this._set_zindex();
+			
+			gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);					
+			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, program.indexBuffer);
+			gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);	
+			gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);
+			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, program.indexBuffer);
+			gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
+			
+			this.__execute_clip(this.currentZIndex)
+			this.currentZIndex -= EPSILON;
+			
 		},
 		clip(path) {
 			var _path = this.path;
@@ -1974,42 +2021,9 @@
 			
 		},
 		fillRect(x, y, width, height) {
-			var gl = this.gl;			
-			var program;
-			
-			if (this.fillStyleRGBA instanceof WebGLTexture) {
-				program = this._select_program(this.texture_program);
-				gl.activeTexture(gl.TEXTURE2);
-				gl.bindTexture(gl.TEXTURE_2D, this.fillStyleRGBA);
-				gl.uniform1i(program.textureLocation, 2);
-			} else {
-				program = this._select_program(this.simple_program);
-				gl.uniform4fv(program.colorLocation, this.fillStyleRGBA);
-			}
-				
-			var points = [x, y, x+width, y, x+width, y+height, x, y+height];	
-			
-			this.__prepare_clip();
-			var _this = this;
-			this._draw_shadow(this._transform, this.currentZIndex, function() {	
-				gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);				
-				gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(points), gl.STATIC_DRAW);
-				gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
-			});
-			this.currentZIndex -= EPSILON;
-
-			var transform = matrixMultiply(this._transform, this.projectionMatrix);
-			
-			gl.uniformMatrix4fv(program.transformLocation, false, transform);
-			gl.uniform1f(program.globalAlphaLocation, this.globalAlpha);
-			this._set_zindex();
-	
-			gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);
-			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(points), gl.STATIC_DRAW);
-			gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);	
-			gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
-			this.__execute_clip(this.currentZIndex)
-			this.currentZIndex -=EPSILON;
+			var path = new Path2D();
+			path.rect(x, y, width, height);
+			this.fill(path);
 		},
 		clearRect(x, y, width, height) {
 			var gl = this.gl;
@@ -2208,80 +2222,31 @@
 
 			return 	[triangle_buffer, to_draw_buffer];
 		},
-		__strokePath(array, closed) {
-			var gl = this.gl;
+		__strokePath(array, closed, vertices, indices) {
+			var vertex_offset = vertices.length;			
 			var use_linedash = this.lineDash.length > 0;
-
-			//select the right program
-			var program;
-			if (this.strokeStyleRGBA instanceof WebGLTexture) {
-				program = this._select_program(this.texture_program);			
-				gl.activeTexture(gl.TEXTURE2);
-				gl.bindTexture(gl.TEXTURE_2D, this.strokeStyleRGBA);
-				gl.uniform1i(program.textureLocation, 2);
-			} else {
-				program = this._select_program(this.simple_program);	
-				gl.uniform4fv(program.colorLocation, this.strokeStyleRGBA);
-			}
-			
 			var lineWidthDiv2 = this.lineWidth / 2.0;
-			
+
 			var result = this.__prepareStroke(array, closed, lineWidthDiv2, use_linedash);
-			var triangle_buffer = result[0];
+			vertices.push(...result[0]);
 			var to_draw_buffer = result[1];
-			
-			var len = triangle_buffer.length/2;
-			
-			var indices = [];
+						
 			if (use_linedash) {
-				for (var i = 2; i < triangle_buffer.length/2; i+=2) {
-					if (to_draw_buffer[i-1]) {
+				for (var i = vertex_offset/2+2; i < vertices.length/2; i+=2) {
+					if (to_draw_buffer[i-vertex_offset/2-1]) {
 						indices.push(i-2, i , i-1, i, i+1, i-1);
 					}
 				}
 			} else {							
-				for (var i = 2; i < triangle_buffer.length/2; i+=2) {
+				for (var i = vertex_offset/2+2; i < vertices.length/2; i+=2) {
 					indices.push(i-2, i , i-1, i, i+1, i-1);
 				}
 			}
-				
-			this.__prepare_clip();
-			var _this = this;
-			this._draw_shadow(this._transform, this.currentZIndex, function() {
-				gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);					
-				gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(triangle_buffer), gl.STATIC_DRAW);
-				gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, program.indexBuffer);
-				gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);	
-				gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);
-				gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, program.indexBuffer);
-				gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
-			});
-
-			this.currentZIndex -= EPSILON;
-			var transform = matrixMultiply(this._transform, this.projectionMatrix);
-			gl.uniformMatrix4fv(program.transformLocation, false, transform);
-			gl.uniform1f(program.globalAlphaLocation, this.globalAlpha);
-			this._set_zindex();
-			
-			gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);					
-			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(triangle_buffer), gl.STATIC_DRAW);
-			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, program.indexBuffer);
-			gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);	
-			gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);
-			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, program.indexBuffer);
-			gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
-			
-			this.__execute_clip(this.currentZIndex)
-			this.currentZIndex -= EPSILON;
 		},
 		strokeRect(x, y, width, height) {
-			var gl = this.gl;
-			this.__strokePath([
-				x, y,
-				x+width, y,
-				x+width, y+height, //], true);
-				x, y+height,
-				x, y], true);
+			var path = new Path2D();
+			path.rect(x, y, width, height);
+			this.stroke(path);
 		},
 		_prepareCanvas(_canvas, msg, maxlen) {
 			// use canvas to draw text, I know it's dumb, but implementing canvas2d compatibletext

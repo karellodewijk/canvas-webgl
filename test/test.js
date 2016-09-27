@@ -26,12 +26,10 @@ function do_test(test) {
 
 window.onload = function() {
 	do_test(function(ctx) {
-		ctx.setLineDash([4, 16]);
-		ctx.lineDashOffset = 2;
-
 		ctx.beginPath();
 		ctx.moveTo(0,100);
 		ctx.lineTo(400, 100);
+		ctx.rect(10, 10, 100, 100);
 		ctx.stroke();
 	});
 }
