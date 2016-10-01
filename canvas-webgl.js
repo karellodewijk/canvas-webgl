@@ -233,6 +233,31 @@
 		}
 	`
 	
+	//quick wrapper around a typed array that supports push and auto-grow mechanics akin to std::vector
+	//It's not great but performance should be better than Array for fixed types and it avoids conversions
+	var TypedArray = function(BufferType, length) {
+		if (!length) length = 10;
+		this.b = new BufferType(10);
+		this.length = 0;
+	}
+
+	TypedArray.prototype = {
+		push() {
+			if (this.length + arguments.length > this.b.length) {
+				var new_b = new this.b.constructor(Math.max(this.length+arguments.length, Math.round(this.b.length * 2)));
+				new_b.set(this.b, 0);
+				this.b = new_b;
+			}
+			for (var i = 0; i < arguments.length; i++) {
+				this.b[this.length++] = arguments[i];
+			}
+			return this.length;	
+		}
+	}
+
+	
+	
+	
 	function matrixMultiply(a, b) {
 	  return[ a[0]  * b[0] + a[1]  * b[4]  + a[2]  * b[8]  + a[3]  * b[12], //0,0
 	          a[0]  * b[1] + a[1]  * b[5]  + a[2]  * b[9]  + a[3]  * b[13], //0,1
@@ -1394,7 +1419,7 @@
 			var _path = this.path;
 			if(path) {  
 				_path = path;
-			}	
+			}
 			
 			var gl = this.gl;
 			//select the right program
@@ -1409,25 +1434,28 @@
 				gl.uniform4fv(program.colorLocation, this.strokeStyleRGBA);
 			}
 			
-			var vertices = [];
-			var indices = [];
+			if (!_path.stroke_vertices) {
+				_path.stroke_buffered = 0;
+				_path.stroke_vertices = new TypedArray(Float32Array);
+				_path.stroke_indices = new TypedArray(Uint16Array);
+			}
 			
-			for (var i in _path.paths) {
+			for (;_path.stroke_buffered < _path.paths.length; _path.stroke_buffered++) {
+				var i = _path.stroke_buffered;
 				var currentPath = _path.paths[i];
 				if (currentPath.length > 2)
-					this.__strokePath(currentPath, _path.closed[i], vertices, indices);
+					this.__strokePath(currentPath, _path.closed[i], _path.stroke_vertices, _path.stroke_indices);
 			}
 			
 			this.__prepare_clip();
 			var _this = this;
 			this._draw_shadow(this._transform, this.currentZIndex, function() {
 				gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);					
-				gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+				gl.bufferData(gl.ARRAY_BUFFER, _path.stroke_vertices.b, gl.STATIC_DRAW);
 				gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, program.indexBuffer);
-				gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);	
+				gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, _path.stroke_indices.b, gl.STATIC_DRAW);	
 				gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);
-				gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, program.indexBuffer);
-				gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
+				gl.drawElements(gl.TRIANGLES, _path.stroke_indices.length, gl.UNSIGNED_SHORT, 0);
 			});
 
 			this.currentZIndex -= EPSILON;
@@ -1437,12 +1465,11 @@
 			this._set_zindex();
 			
 			gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);					
-			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+			gl.bufferData(gl.ARRAY_BUFFER, _path.stroke_vertices.b, gl.STATIC_DRAW);
 			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, program.indexBuffer);
-			gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);	
+			gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, _path.stroke_indices.b, gl.STATIC_DRAW);	
 			gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);
-			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, program.indexBuffer);
-			gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
+			gl.drawElements(gl.TRIANGLES, _path.stroke_indices.length, gl.UNSIGNED_SHORT, 0);
 			
 			this.__execute_clip(this.currentZIndex)
 			this.currentZIndex -= EPSILON;
@@ -1583,16 +1610,16 @@
 				
 				var lineWidthDiv2 = this.lineWidth / 2.0;
 				
-				var result = this.__prepareStroke(currentPath, _path.closed[k], lineWidthDiv2, false);
-				var triangle_buffer = result[0];
+				var vertices = []
+				var result = this.__prepareStroke(currentPath, _path.closed[k], lineWidthDiv2, false, vertices);
 
-				for (var i = 0; i < triangle_buffer.length-7; i+=2) {
-					if (is_in_triangle(_x, _y, triangle_buffer[i],   triangle_buffer[i+1], 
-											   triangle_buffer[i+2], triangle_buffer[i+3],
-											   triangle_buffer[i+4], triangle_buffer[i+5])) { return true; }
-					if (is_in_triangle(_x, _y, triangle_buffer[i+4], triangle_buffer[i+5], 
-											   triangle_buffer[i+6], triangle_buffer[i+7],
-											   triangle_buffer[i+2], triangle_buffer[i+3])) { return true; }
+				for (var i = 0; i < vertices.length-7; i+=2) {
+					if (is_in_triangle(_x, _y, vertices[i],   vertices[i+1], 
+											   vertices[i+2], vertices[i+3],
+											   vertices[i+4], vertices[i+5])) { return true; }
+					if (is_in_triangle(_x, _y, vertices[i+4], vertices[i+5], 
+											   vertices[i+6], vertices[i+7],
+											   vertices[i+2], vertices[i+3])) { return true; }
 				}
 			}
 			return false;
@@ -1740,6 +1767,7 @@
 			return this._fillStyle;
 		},
 		set fillStyle(new_color) {
+			if (new_color == this._fillStyle) return;
 			this._fillStyle = new_color;
 			if (typeof new_color == 'string') {
 				this.fillStyleRGBA = parseColor(new_color);
@@ -1751,6 +1779,7 @@
 			return this._strokeStyle;
 		},
 		set strokeStyle(new_color) {
+			if (new_color == this._strokeStyle) return;
 			this._strokeStyle = new_color;
 			if (typeof new_color == 'string') {
 				this.strokeStyleRGBA = parseColor(new_color);
@@ -1762,6 +1791,7 @@
 			return this._shadowColor;
 		},
 		set shadowColor(new_color) {
+			if (new_color == this._shadowColor) return;
 			this._shadowColor = new_color;
 			if (typeof new_color == 'string') {
 				this._shadowColorRGBA = parseColor(new_color);
@@ -1774,6 +1804,8 @@
 			return program;
 		},
 		_draw_shadow(transform, z_index, draw_cb) {
+			//return;
+			
 			if (this.shadowOffsetX == 0 && this.shadowOffsetY==0 && this.shadowBlur == 0) return;
 						
 			var gl = this.gl;
@@ -1961,10 +1993,18 @@
 				program = this._select_program(this.simple_program);
 				gl.uniform4fv(program.colorLocation, this.fillStyleRGBA);
 			}
+
+			if (!_path.fill_vertices) {
+				_path.fill_buffered = 0;
+				_path.fill_vertices = new TypedArray(Float32Array);
+				_path.fill_indices = new TypedArray(Uint16Array);
+			}
 			
-			var vertices = [];
-			var indices = []
-			for (var i in _path.paths) {
+			var vertices = new TypedArray(Float32Array);
+			var indices = new TypedArray(Uint16Array);
+			
+			for (;_path.fill_buffered < _path.paths.length; _path.fill_buffered++) {
+				var i = _path.fill_buffered;
 				var currentPath = _path.paths[i];
 				var closed = currentPath[0] == currentPath[currentPath.length-2] && currentPath[1] == currentPath[currentPath.length-1];			
 				if (!closed) {
@@ -1975,13 +2015,12 @@
 				if (triangles.length > 0) {
 					var offset = vertices.length/2;
 					for (var j in triangles) {
-						indices.push(offset+triangles[j]);
+						_path.fill_indices.push(offset+triangles[j]);
 					}
 					for (var j in currentPath) {
-						vertices.push(currentPath[j])
+						_path.fill_vertices.push(currentPath[j])
 					}
 				}
-
 				if (!closed) {
 					currentPath.pop();
 					currentPath.pop();
@@ -1993,12 +2032,11 @@
 			var _this = this;		
 			this._draw_shadow(this._transform, this.currentZIndex, function() {	
 				gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);					
-				gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+				gl.bufferData(gl.ARRAY_BUFFER, _path.fill_vertices.b, gl.STATIC_DRAW);
 				gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, program.indexBuffer);
-				gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);	
+				gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, _path.fill_indices.b, gl.STATIC_DRAW);	
 				gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);
-				gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, program.indexBuffer);
-				gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
+				gl.drawElements(gl.TRIANGLES, _path.fill_indices.length, gl.UNSIGNED_SHORT, 0);
 			});
 			this.currentZIndex -=EPSILON;
 
@@ -2008,13 +2046,11 @@
 			gl.uniform1f(program.globalAlphaLocation, this.globalAlpha);
 	
 			gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);					
-			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+			gl.bufferData(gl.ARRAY_BUFFER, _path.fill_vertices.b, gl.STATIC_DRAW);
 			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, program.indexBuffer);
-			gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);	
-			gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);
-			
-			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, program.indexBuffer);
-			gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
+			gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, _path.fill_indices.b, gl.STATIC_DRAW);	
+			gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);			
+			gl.drawElements(gl.TRIANGLES, _path.fill_indices.length, gl.UNSIGNED_SHORT, 0);
 			
 			this.__execute_clip(this.currentZIndex)
 			this.currentZIndex -=EPSILON;
@@ -2036,7 +2072,7 @@
 				gl.disable(gl.SCISSOR_TEST);
 			}
 		},
-		__prepareStroke(path, closed, lineWidthDiv2, use_linedash) {
+		__prepareStroke(path, closed, lineWidthDiv2, use_linedash, vertices, indices) {
 			//Polyline algorithm, take a piece of paper and draw it if you want to understand what is happening
 			//If stroking turns out to be slow, here will be your problem. This should and can easily 
 			//be implemented in a geometry shader or something so it runs on the gpu. But webgl doesn't
@@ -2062,10 +2098,9 @@
 				array = result[0];
 			}
 			
-			var triangle_buffer = [];
+			var vertex_offset = vertices.length;	
+			var vertex_progress = vertices.length;
 			var to_draw_buffer = [];
-			
-			var previous_triangle_buffer_length = 0;
 			
 			if (!closed) {
 				var line = [array[2] - array[0], array[3] - array[1]]		
@@ -2078,25 +2113,25 @@
 				var b = [array[0] - lineWidthDiv2 * normal[0], array[1] - lineWidthDiv2 * normal[1]]
 				
 				if (this.lineCap == 'butt')	{	
-					triangle_buffer.push(a[0], a[1], b[0], b[1]);
+					vertices.push(a[0], a[1], b[0], b[1]);
 				} else if (this.lineCap == 'square') {
-					triangle_buffer.push(a[0] - lineWidthDiv2 * line[0], a[1] - lineWidthDiv2 * line[1], 
+					vertices.push(a[0] - lineWidthDiv2 * line[0], a[1] - lineWidthDiv2 * line[1], 
 										 b[0] - lineWidthDiv2 * line[0], b[1] - lineWidthDiv2 * line[1]);				
 				} else { //round
-					triangle_buffer.push(array[0], array[1], a[0], a[1]);
+					vertices.push(array[0], array[1], a[0], a[1]);
 					var startAngle = Math.atan2(a[1] - array[1], a[0] - array[0])
 					var endAngle = Math.atan2(b[1] - array[1], b[0] - array[0])					
-					_add_arc(triangle_buffer, array[0], array[1], lineWidthDiv2, startAngle, endAngle);
-					triangle_buffer.push(array[0], array[1], b[0], b[1]);
-					triangle_buffer.push(a[0], a[1], b[0], b[1]);
+					_add_arc(vertices, array[0], array[1], lineWidthDiv2, startAngle, endAngle);
+					vertices.push(array[0], array[1], b[0], b[1]);
+					vertices.push(a[0], a[1], b[0], b[1]);
 				}
 				
 				if (use_linedash) {
-					var to_draw =  to_draw_or_not_to_draw[0];
-					for (var j = 0; j < triangle_buffer.length - previous_triangle_buffer_length; j+=2) {
+					var to_draw = to_draw_or_not_to_draw[0];
+					for (var j = vertex_progress; j < vertices.length; j+=2) {
 						to_draw_buffer.push(to_draw);
 					}
-					previous_triangle_buffer_length = triangle_buffer.length;
+					vertex_progress = vertices.length;
 				}			
 			} else {
 				array.push(array[2], array[3]);
@@ -2136,7 +2171,7 @@
 
 				if (this.lineJoin == 'miter' && (1/dot) <= this.miterLimit) {
 					//miter
-					triangle_buffer.push(a[0], a[1], b[0], b[1]);
+					vertices.push(a[0], a[1], b[0], b[1]);
 				} else {
 					var sin_angle = p1minp0[1] * p2minp1[0] - p1minp0[0] * p2minp1[1];
 					
@@ -2145,39 +2180,39 @@
 						if (sin_angle < 0) {
 							var n1 = [array[i] + p1minp0[1] * lineWidthDiv2, array[i+1] - p1minp0[0] * lineWidthDiv2]
 							var n2 = [array[i] + p2minp1[1] * lineWidthDiv2, array[i+1] - p2minp1[0] * lineWidthDiv2]
-							triangle_buffer.push(a[0], a[1], n1[0], n1[1]);
+							vertices.push(a[0], a[1], n1[0], n1[1]);
 							var startAngle = Math.atan2(n1[1] - array[i+1] , n1[0] - array[i])
 							var endAngle = Math.atan2(n2[1] - array[i+1],  n2[0] - array[i])
-							_add_arc(triangle_buffer, array[i], array[i+1], lineWidthDiv2, startAngle, endAngle)							
-							triangle_buffer.push(a[0], a[1], n2[0], n2[1]);
+							_add_arc(vertices, array[i], array[i+1], lineWidthDiv2, startAngle, endAngle)							
+							vertices.push(a[0], a[1], n2[0], n2[1]);
 						} else {
 							var n1 = [array[i] - p1minp0[1] * lineWidthDiv2, array[i+1] + p1minp0[0] * lineWidthDiv2]
 							var n2 = [array[i] - p2minp1[1] * lineWidthDiv2, array[i+1] + p2minp1[0] * lineWidthDiv2]	
-							triangle_buffer.push(n1[0], n1[1], b[0], b[1]);
+							vertices.push(n1[0], n1[1], b[0], b[1]);
 							var startAngle = Math.atan2(n2[1] - array[i+1] , n2[0] - array[i])
 							var endAngle = Math.atan2(n1[1] - array[i+1],  n1[0] - array[i])
-							_add_arc(triangle_buffer, array[i], array[i+1], lineWidthDiv2, startAngle, endAngle);
-							triangle_buffer.push(n2[0], n2[1], b[0], b[1]);
+							_add_arc(vertices, array[i], array[i+1], lineWidthDiv2, startAngle, endAngle);
+							vertices.push(n2[0], n2[1], b[0], b[1]);
 						}
 					} else {
 						//bevel
 						if (sin_angle < 0) { 
 							var n1 = [array[i] + p1minp0[1] * lineWidthDiv2, array[i+1] - p1minp0[0] * lineWidthDiv2]
 							var n2 = [array[i] + p2minp1[1] * lineWidthDiv2, array[i+1] - p2minp1[0] * lineWidthDiv2]
-							triangle_buffer.push(a[0], a[1], n1[0], n1[1], a[0], a[1], n2[0], n2[1]);
+							vertices.push(a[0], a[1], n1[0], n1[1], a[0], a[1], n2[0], n2[1]);
 						} else {
 							var n1 = [array[i] - p1minp0[1] * lineWidthDiv2, array[i+1] + p1minp0[0] * lineWidthDiv2]
 							var n2 = [array[i] - p2minp1[1] * lineWidthDiv2, array[i+1] + p2minp1[0] * lineWidthDiv2]	
-							triangle_buffer.push(n1[0], n1[1], b[0], b[1], n2[0], n2[1], b[0], b[1]);
+							vertices.push(n1[0], n1[1], b[0], b[1], n2[0], n2[1], b[0], b[1]);
 						}
 					}
 				}			
 				if (use_linedash) {
 					var to_draw =  to_draw_or_not_to_draw[i/2];
-					for (var j = 0; j < triangle_buffer.length - previous_triangle_buffer_length; j+=2) {
+					for (var j = vertex_progress; j < vertices.length; j+=2) {
 						to_draw_buffer.push(to_draw);
 					}
-					previous_triangle_buffer_length = triangle_buffer.length;
+					vertex_progress = vertices.length;
 				}
 			}
 			
@@ -2192,44 +2227,38 @@
 				var b = [array[array.length-2] - lineWidthDiv2 * normal[0], array[array.length-1] - lineWidthDiv2 * normal[1]]
 				
 				if (this.lineCap == 'butt')	{	
-					triangle_buffer.push(a[0], a[1], b[0], b[1]);
+					vertices.push(a[0], a[1], b[0], b[1]);
 				} else if (this.lineCap == 'square') {
-					triangle_buffer.push(a[0] + lineWidthDiv2 * line[0], a[1] + lineWidthDiv2 * line[1], 
+					vertices.push(a[0] + lineWidthDiv2 * line[0], a[1] + lineWidthDiv2 * line[1], 
 										 b[0] + lineWidthDiv2 * line[0], b[1] + lineWidthDiv2 * line[1]);				
 				} else { //round
-					triangle_buffer.push(a[0], a[1], b[0], b[1]);				
-					triangle_buffer.push(array[array.length-2], array[array.length-1], b[0], b[1]);
+					vertices.push(a[0], a[1], b[0], b[1]);				
+					vertices.push(array[array.length-2], array[array.length-1], b[0], b[1]);
 					var startAngle = Math.atan2(b[1] - array[array.length-1], b[0] - array[array.length-2])
 					var endAngle = Math.atan2(a[1] - array[array.length-1], a[0] - array[array.length-2])	
-					_add_arc(triangle_buffer, array[array.length-2], array[array.length-1], lineWidthDiv2, startAngle, endAngle);					
-					triangle_buffer.push(array[array.length-2], array[array.length-1], a[0], a[1]);
+					_add_arc(vertices, array[array.length-2], array[array.length-1], lineWidthDiv2, startAngle, endAngle);					
+					vertices.push(array[array.length-2], array[array.length-1], a[0], a[1]);
 				}
 			} else {
-				triangle_buffer.push(triangle_buffer[0], triangle_buffer[1], triangle_buffer[2], triangle_buffer[3])
-				array.pop();
-				array.pop();
-				array.pop();
-				array.pop();
+				vertices.push(vertices.b[vertex_offset], vertices.b[vertex_offset+1], vertices.b[vertex_offset+2], vertices.b[vertex_offset+3])
 			}
 					
 			if (use_linedash) {
 				var to_draw =  to_draw_or_not_to_draw[to_draw_or_not_to_draw.length-1];
-				for (var j = 0; j < triangle_buffer.length - previous_triangle_buffer_length; j+=2) {
+				for (var j = vertex_progress; j < vertices.length; j+=2) {
 					to_draw_buffer.push(to_draw);
 				}
-				previous_triangle_buffer_length = triangle_buffer.length;
+				vertex_progress = vertices.length;
 			}
 
-			return 	[triangle_buffer, to_draw_buffer];
+			return 	to_draw_buffer;
 		},
 		__strokePath(array, closed, vertices, indices) {
 			var vertex_offset = vertices.length;			
 			var use_linedash = this.lineDash.length > 0;
 			var lineWidthDiv2 = this.lineWidth / 2.0;
 
-			var result = this.__prepareStroke(array, closed, lineWidthDiv2, use_linedash);
-			vertices.push(...result[0]);
-			var to_draw_buffer = result[1];
+			var to_draw_buffer = this.__prepareStroke(array, closed, lineWidthDiv2, use_linedash, vertices);
 						
 			if (use_linedash) {
 				for (var i = vertex_offset/2+2; i < vertices.length/2; i+=2) {

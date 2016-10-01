@@ -26,31 +26,10 @@ function do_test(test) {
 
 window.onload = function() {
 	do_test(function(ctx) {
-		var TypedArray = function(BufferType, length) {
-			if (!length) length = 10;
-			this.b = new BufferType(10);
-			this.length = 0;
-		}
-	
-		TypedArray.prototype = {
-			push() {
-				if (this.length + arguments.length > this.b.length) {
-					var new_b = new this.b.constructor(Math.max(this.length+arguments.length, Math.round(this.b.length * 2)));
-					new_b.set(this.b, 0);
-					this.b = new_b;
-				}
-				for (var i = 0; i < arguments.length; i++) {
-					this.b[this.length++] = arguments[i];
-				}
-				return this.length;	
-			}
-		}
-		
-		var test = new TypedArray(Uint8Array);
-		for (var i = 0; i < 100; i++) {
-			test.push(i)
-		}
-		console.log(test.b)
-	
+		ctx.font = "30px Arial";
+		ctx.shadowColor = "black";
+		ctx.shadowOffsetX = 5; 
+		ctx.shadowOffsetY = 5; 
+		ctx.fillText("Hello world", 50, 50);
 	});
 }
