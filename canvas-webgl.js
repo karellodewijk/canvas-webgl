@@ -5,6 +5,7 @@
 	var BEZIER_CURVE_RESOLUTION = 5; //space between interpolation points for quadratic and bezier curve approx. in pixels.
 	var ARC_RESOLUTION = 5;  //space between interpolation points for quadratic and bezier curve approx. in pixels. Also used for linejoins and linecaps
 	var SQRT_2 = Math.sqrt(2);
+	var MAX_TEXTURE_SIZE = 4096;
 	
 	var shadow_fragment_shader = `
 	    precision mediump float;
@@ -53,37 +54,31 @@
 		}
 	`
 
-	var image_draw_vertex_shader = `
+		var image_draw_vertex_shader2 = `
 		attribute vec2 a_position;
 		attribute vec2 a_texcoord;
-
+		
 		uniform float u_zindex;
 		uniform mat4 u_matrix;
-		uniform mat4 u_textureMatrix;
-		 
+		
 		varying vec2 v_texcoord;
-		 
+
 		void main() {
-		   gl_Position = u_matrix * vec4(a_position, u_zindex, 1);
-		   v_texcoord = (u_textureMatrix * vec4(a_position.xy, 0, 1)).xy;
+		  gl_Position = u_matrix * vec4(a_position, u_zindex, 1);
+		  v_texcoord = a_texcoord;
 		}
 	`
 	
-	var image_draw_fragment_shader = `	
+	var image_draw_fragment_shader2 = `	
 		precision mediump float;
-		 
-		varying vec2 v_texcoord;
-		 
+
 		uniform sampler2D texture;
 		uniform float u_global_alpha;
-		 
+		
+		varying vec2 v_texcoord;
+		
+
 		void main() {
-		   if (v_texcoord.x < 0.0 ||
-			   v_texcoord.y < 0.0 ||
-			   v_texcoord.x > 1.0 ||
-			   v_texcoord.y > 1.0) {
-			 discard;
-		   }
 		   gl_FragColor = texture2D(texture, v_texcoord);
 		   gl_FragColor.w *= u_global_alpha;
 		}
@@ -235,6 +230,7 @@
 	
 	//quick wrapper around a typed array that supports push and auto-grow mechanics akin to std::vector
 	//It's not great but performance should be better than Array for fixed types and it avoids conversions
+	//NOTE: only supports push/length, everything else should be done by .b var which contains the actual buffer
 	var TypedArray = function(BufferType, length) {
 		if (!length) length = 10;
 		this.b = new BufferType(10);
@@ -244,6 +240,7 @@
 	TypedArray.prototype = {
 		push() {
 			if (this.length + arguments.length > this.b.length) {
+				//grow buffer
 				var new_b = new this.b.constructor(Math.max(this.length+arguments.length, Math.round(this.b.length * 2)));
 				new_b.set(this.b, 0);
 				this.b = new_b;
@@ -254,9 +251,142 @@
 			return this.length;	
 		}
 	}
-
 	
+	//2d bin packing algorihm, taken from https://github.com/mackstann/binpack
+    function Rect(x, y, w, h) {
+        this.x = x;
+        this.y = y;
+        this.w = w;
+        this.h = h;
+    }
+    Rect.prototype.fits_in = function(outer) {
+        return outer.w >= this.w && outer.h >= this.h;
+    }
+    Rect.prototype.same_size_as = function(other) {
+        return this.w == other.w && this.h == other.h;
+    }	
+    function Node() {
+        this.left = null;
+        this.right = null;
+        this.rect = null;
+        this.filled = false;
+    }
+    Node.prototype = {
+		insert_rect(rect) {
+			if(this.left != null)
+				return this.left.insert_rect(rect) || this.right.insert_rect(rect);
+			if(this.filled)
+				return null;
+			if(!rect.fits_in(this.rect))
+				return null;
+			if(rect.same_size_as(this.rect)) {
+				this.filled = true;
+				return this;
+			}
+			this.left = new Node();
+			this.right = new Node();
+			var width_diff = this.rect.w - rect.w;
+			var height_diff = this.rect.h - rect.h;
+			var me = this.rect;
+			if(width_diff > height_diff) {
+				// split literally into left and right, putting the rect on the left.
+				this.left.rect = new Rect(me.x, me.y, rect.w, me.h);
+				this.right.rect = new Rect(me.x + rect.w, me.y, me.w - rect.w, me.h);
+			} else {
+				// split into top and bottom, putting rect on top.
+				this.left.rect = new Rect(me.x, me.y, me.w, rect.h);
+				this.right.rect = new Rect(me.x, me.y + rect.h, me.w, me.h - rect.h);
+			}
+			return this.left.insert_rect(rect);
+		},
+		insert_rect_partition(rect, xOffset, yOffset) {
+			if (rect.w < 50 && rect.h < 50) return [null]; //partitioning further just doesn't make sense
+			var node = this.insert_rect(rect);
+			if (node == null) {
+				var rect1, rect2, xOffset2, yOffset2;
+				if (rect.w >= rect.h) {
+					rect1 = new Rect(0, 0, Math.round(rect.w/2), rect.h);
+					rect2 = new Rect(0, 0, rect.w - Math.round(rect.w/2), rect.h);
+					xOffset2 = xOffset + Math.round(rect.w/2);
+					yOffset2 = yOffset;
+				} else {
+					rect1 = new Rect(0, 0, rect.w, Math.round(rect.h/2));
+					rect2 = new Rect(0, 0, rect.w, rect.h - Math.round(rect.h/2));
+					xOffset2 = xOffset;
+					yOffset2 = yOffset + Math.round(rect.h/2);					
+				}
+				return this.insert_rect_partition(rect2, xOffset2 , yOffset2).concat(this.insert_rect_partition(rect1, xOffset, yOffset));
+			}
+			node.x = xOffset;
+			node.y = yOffset;
+			return [node];
+		}
+    }
 	
+	function TextureManager(gl, width, height) {
+		this.gl = gl;
+		this.root = new Node();
+		this.root.rect = new Rect(0, 0, width, height);
+		gl.activeTexture(gl.TEXTURE4);
+		this.texture = gl.createTexture();
+		gl.bindTexture(gl.TEXTURE_2D, this.texture);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+		
+		//the things we need to do to crealte a wxh blank texture
+		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(width*height*4));
+	}
+	
+	TextureManager.prototype = {
+		set_texture(img) {
+			var gl = this.gl;
+			gl.activeTexture(gl.TEXTURE4);
+			gl.bindTexture(gl.TEXTURE_2D, this.texture);		
+			var write_texture = function() {
+				if (img.nodes.length == 1) {
+					var node = img.nodes[0];
+					if (node == null) {
+						console.warn("Texture full: contact the canvas-webgl API developer for a fix");
+					} else {
+						gl.texSubImage2D(gl.TEXTURE_2D, 0, node.rect.x, node.rect.y, gl.RGBA, gl.UNSIGNED_BYTE, img);
+					}
+				} else {
+					for (var i in img.nodes) {
+						var node = img.nodes[i];
+						if (node == null) {
+							console.warn("Texture full: contact the canvas-webgl API developer for a fix");
+							continue;
+						}
+						var canvas = document.createElement('canvas');
+						canvas.width = node.rect.w;
+						canvas.height = node.rect.h;
+						var ctx = canvas.getContext('2d');
+						ctx.drawImage(img, node.x, node.y, node.rect.w, node.rect.h, 0, 0, node.rect.w, node.rect.h);
+						gl.texSubImage2D(gl.TEXTURE_2D, 0, node.rect.x, node.rect.y, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
+					}
+				}				
+			}			
+			if (img instanceof HTMLCanvasElement) {
+				//canvas has no associated texture space or the canvas is grown
+				if (!img.nodes || img.width > img.orig_width || img.height > img.orig_height) {
+					var w = img.orig_width ? Math.max(img.width, img.orig_width) : img.width;
+					var h = img.orig_height ? Math.max(img.height, img.orig_height) : img.height;
+					var rect = new Rect(0, 0, w, h);
+					img.orig_height = w;
+					img.orig_width = h;
+					img.nodes = this.root.insert_rect_partition(rect, 0, 0);
+				}
+				write_texture(); //always overwrite the texture space as canvas may have changed
+			} else {
+				if (!img.nodes) {
+					var rect = new Rect(0, 0, img.width, img.height);
+					img.nodes = this.root.insert_rect_partition(rect, 0, 0);
+					write_texture();
+				}
+			}
+		}
+	}
 	
 	function matrixMultiply(a, b) {
 	  return[ a[0]  * b[0] + a[1]  * b[4]  + a[2]  * b[8]  + a[3]  * b[12], //0,0
@@ -407,11 +537,12 @@
 			gl.activeTexture(gl.TEXTURE0);
 			gl.bindTexture(gl.TEXTURE_2D, texture);					
 	
-			var points = [0, 0, width, 0, width, height, 0, height];	
+			var texPoints = [0, 0, 1, 0, 1, 1, 0, 1];			
+			gl.bindBuffer(gl.ARRAY_BUFFER, program.texCoordBuffer);
+			gl.vertexAttribPointer(program.texCoordLocation, 2, gl.FLOAT, false, 0, 0);				
+			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(texPoints), gl.STATIC_DRAW);
 			
-			gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);
-			gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);				
-			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(points), gl.STATIC_DRAW);
+			gl.uniformMatrix4fv(program.transformLocation, false, ctx.projectionMatrix);
 			
 			var iw, ih;
 			if (this.image instanceof HTMLImageElement) {
@@ -432,13 +563,10 @@
 			if (iw > 0 && ih > 0) {
 				for (var x=0; x < width; x+=iw) {
 					for (var y=0; y < height; y+=ih) {				
-						var projectionMatrix = [
-							 1/iw, 0, 0, 0,
-							 0, 1/ih, 0, 0,
-							 0, 0, 1, 0,
-							 -x/iw, -y/ih, 0, 1
-						];
-						gl.uniformMatrix4fv(program.textureMatrixLocation, false, projectionMatrix);
+						var points = [x, y, x+iw, y, x+iw, y+ih, x, y+ih];
+						gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);
+						gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);				
+						gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(points), gl.STATIC_DRAW);
 						gl.drawArrays(gl.TRIANGLE_FAN, 0, points.length/2);
 					}
 				}
@@ -973,7 +1101,7 @@
 		//used for regular stroke/fill with no dash pattern but per-vertex color
 		this.circle_program = create_program(simple_draw_vertex_shader, circle_gradient_fragment_shader)
 		//used for loading images
-		this.image_program = create_program(image_draw_vertex_shader, image_draw_fragment_shader);
+		this.image_program = create_program(image_draw_vertex_shader2, image_draw_fragment_shader2);
 		//applies guassian blur
 		this.shadow_program = create_program(shadow_vertex_shader, shadow_fragment_shader);	
 		//Accepts texture and location positions and maps them
@@ -992,7 +1120,6 @@
 
 		program.transformLocation = gl.getUniformLocation(program, "u_matrix");
 		gl.uniformMatrix4fv(program.transformLocation, false, this.projectionMatrix);
-		program.textureMatrixLocation = gl.getUniformLocation(program, "u_textureMatrix");
 		program.textureLocation = gl.getUniformLocation(program, "texture");
 		program.zindexLocation = gl.getUniformLocation(program, "u_zindex");
 		program.globalAlphaLocation = gl.getUniformLocation(program, "u_global_alpha");
@@ -1001,10 +1128,15 @@
 		program.positionLocation = gl.getAttribLocation(program, "a_position");
 		program.vertexBuffer = gl.createBuffer();
 		program.indexBuffer = gl.createBuffer();
-		
 		gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);
 		gl.enableVertexAttribArray(program.positionLocation);
 		gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);	
+		
+		program.texCoordLocation = gl.getAttribLocation(program, "a_texcoord");
+		program.texCoordBuffer = gl.createBuffer();
+		gl.bindBuffer(gl.ARRAY_BUFFER, program.texCoordBuffer);
+		gl.enableVertexAttribArray(program.texCoordLocation);
+		gl.vertexAttribPointer(program.texCoordLocation, 2, gl.FLOAT, false, 0, 0);	
 		
 		//init gradient draw program
 		program = this.gradient_program;
@@ -1434,8 +1566,10 @@
 				gl.uniform4fv(program.colorLocation, this.strokeStyleRGBA);
 			}
 			
-			if (!_path.stroke_vertices) {
+			if (!_path.stroke_lineWidth || _path.stroke_lineWidth != this.lineWidth) {
+				//buffer is only correct for a certain linewidth
 				_path.stroke_buffered = 0;
+				_path.stroke_lineWidth = this.lineWidth; 
 				_path.stroke_vertices = new TypedArray(Float32Array);
 				_path.stroke_indices = new TypedArray(Uint16Array);
 			}
@@ -1556,8 +1690,7 @@
 				gl.drawArrays(gl.TRIANGLES, 0, this.clipPlane.length/2);
 			}
 			gl.bindTexture(gl.TEXTURE_2D, null);
-		},
-		
+		},		
 		isPointInPath(path, x, y) {
 			//works but I wouldn't recommend using it a whole lot, cause it's sloooow
 			//It triangulates and then checks every triangle
@@ -1605,25 +1738,22 @@
 				_y = x;
 			}
 			
+			var lineWidthDiv2 = this.lineWidth / 2.0;
 			for (var k in _path.paths) {		
 				var currentPath = _path.paths[k];
 				
-				var lineWidthDiv2 = this.lineWidth / 2.0;
+				var vertices = new TypedArray(Float32Array);
+				var indices = new TypedArray(Uint16Array);
 				
-				var vertices = []
-				var result = this.__prepareStroke(currentPath, _path.closed[k], lineWidthDiv2, false, vertices);
+				this.__strokePath(currentPath, _path.closed[k], vertices, indices);
 
-				for (var i = 0; i < vertices.length-7; i+=2) {
-					if (is_in_triangle(_x, _y, vertices[i],   vertices[i+1], 
-											   vertices[i+2], vertices[i+3],
-											   vertices[i+4], vertices[i+5])) { return true; }
-					if (is_in_triangle(_x, _y, vertices[i+4], vertices[i+5], 
-											   vertices[i+6], vertices[i+7],
-											   vertices[i+2], vertices[i+3])) { return true; }
+				for (var i = 0; i < indices.length; i+=3) {
+					if (is_in_triangle(_x, _y, vertices.b[indices.b[i]*2],   vertices.b[indices.b[i]*2+1], 
+											   vertices.b[indices.b[i+1]*2],   vertices.b[indices.b[i+1]*2+1],
+											   vertices.b[indices.b[i+2]*2],   vertices.b[indices.b[i+2]*2+1])) { return true; }
 				}
 			}
-			return false;
-			
+			return false;			
 		},
 		get canvas() { return this.gl.canvas; },
 		get height() { return this.canvas.height; },
@@ -2072,7 +2202,7 @@
 				gl.disable(gl.SCISSOR_TEST);
 			}
 		},
-		__prepareStroke(path, closed, lineWidthDiv2, use_linedash, vertices, indices) {
+		__prepareStroke(path, closed, lineWidthDiv2, use_linedash, vertices) {
 			//Polyline algorithm, take a piece of paper and draw it if you want to understand what is happening
 			//If stroking turns out to be slow, here will be your problem. This should and can easily 
 			//be implemented in a geometry shader or something so it runs on the gpu. But webgl doesn't
@@ -2373,13 +2503,9 @@
 		},
 		drawImage(img, srcX, srcY, srcWidth, srcHeight, dstX, dstY, dstWidth, dstHeight) {
 			var gl = this.gl;
-			if (!this.imageTexture) {
-				gl.activeTexture(gl.TEXTURE4);
-				this.imageTexture = gl.createTexture();
-				gl.bindTexture(gl.TEXTURE_2D, this.imageTexture);
-				gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-				gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-				gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+
+			if (!this.textureManager) {
+				this.textureManager = new TextureManager(gl, MAX_TEXTURE_SIZE, MAX_TEXTURE_SIZE);
 			}
 			
 			//we take z-index now as we're supposed to draw now
@@ -2389,7 +2515,6 @@
 			var _this = this;
 			var image_loaded = function() {
 				var program = _this._select_program(_this.image_program);
-
 				var img_width, img_height;
 				if (img instanceof HTMLImageElement) {
 					img_width = img.naturalWidth;
@@ -2398,7 +2523,6 @@
 					img_width = img.width;
 					img_height = img.height;					
 				}			
-				
 				if (dstX === undefined) {
 					dstX = srcX;
 					srcX = 0;
@@ -2422,65 +2546,107 @@
 					srcHeight = img_height;
 				}
 
-				gl.activeTexture(gl.TEXTURE4);
-				gl.bindTexture(gl.TEXTURE_2D, _this.imageTexture);	
+				var scaleX = dstWidth / srcWidth;
+				var scaleY = dstHeight / srcHeight;
+
+				var points = [];
+				var texPoints = [];
+				var indices = new TypedArray(Uint16Array);		
+				var offset = 0;
 				
-				if (img_width <= 4096 && img_height <= 4096) {	
-					gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+				//if (img instanceof HTMLImageElement) {
+				if (true) {
+					//use texture caching
+					_this.textureManager.set_texture(img);
+			
+					for (var i in img.nodes) {
+						var node = img.nodes[i];
+						
+						if (!node || srcX+srcWidth <= node.x || srcY+srcHeight <= node.y || srcX > node.x+node.rect.w || srcY > node.y+node.rect.h) continue;
+
+						var x = Math.max(node.rect.x, node.rect.x + srcX - node.x);
+						var y = Math.max(node.rect.y, node.rect.y + srcY - node.y);
+						var w = Math.min(srcX + srcWidth - node.x, node.x + node.rect.w) - Math.max(0, srcX - node.x)
+						var h = Math.min(srcY + srcHeight - node.y, node.y + node.rect.h) - Math.max(0, srcY - node.y)
+
+						texPoints.push(x/MAX_TEXTURE_SIZE, y/MAX_TEXTURE_SIZE, (x+w)/MAX_TEXTURE_SIZE, y/MAX_TEXTURE_SIZE, (x+w)/MAX_TEXTURE_SIZE, (y+h)/MAX_TEXTURE_SIZE, x/MAX_TEXTURE_SIZE, (y+h)/MAX_TEXTURE_SIZE);
+						
+						var dx = dstX + Math.max(0, (node.x - srcX) * scaleX);
+						var dy = dstY + Math.max(0, (node.y - srcY) * scaleY);
+						var dw = w * scaleX;
+						var dh = h * scaleY;
+						
+						points.push(dx, dy, dx+dw, dy, dx+dw, dy+dh, dx, dy+dh);
+						
+						indices.push(offset+0, offset+1, offset+2, offset+0, offset+2, offset+3);
+						offset += 4;			
+					}
+					gl.uniform1i(program.textureLocation, 4);
 				} else {
-					console.warn("Texture too large >4096px. using canvas fallback.");
-					var canvas = document.createElement('canvas');
-					canvas.width = srcWidth;
-					canvas.height = srcHeight;
-					var ctx = canvas.getContext('2d')
-					ctx.drawImage(img, srcX, srcY, srcWidth, srcHeight, 0, 0, srcWidth, srcHeight);
-					gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
-					srcX = 0; srcY=0; img_width=srcWidth; img_height=srcHeight;
+					/*
+					//do not use texture cache
+					gl.activeTexture(gl.TEXTURE5);		
+					if (!_this.imageTexture) {
+						_this.imageTexture = gl.createTexture();
+						gl.bindTexture(gl.TEXTURE_2D, _this.imageTexture);
+						gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+						gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+						gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+					}					
+					gl.bindTexture(gl.TEXTURE_2D, _this.imageTexture);
+					if (img_width <= MAX_TEXTURE_SIZE && img_height <= MAX_TEXTURE_SIZE) {	
+						gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+					} else {
+						console.warn("Texture too large >MAX_TEXTURE_SIZEpx. using canvas fallback.");
+						var canvas = document.createElement('canvas');
+						canvas.width = srcWidth;
+						canvas.height = srcHeight;
+						var ctx = canvas.getContext('2d')
+						ctx.drawImage(img, srcX, srcY, srcWidth, srcHeight, 0, 0, srcWidth, srcHeight);
+						gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
+						srcX = 0; srcY=0; img_width=srcWidth; img_height=srcHeight;
+					}
+					
+					texPoints.push(srcX/img_width, srcY/img_height, (srcX+srcWidth)/img_width, srcY/img_height, (srcX+srcWidth)/img_width, (srcY+srcHeight)/img_height, srcX/img_width, (srcY+srcHeight)/img_height);
+					points.push(dstX, dstY, dstX+dstWidth, dstY, dstX+dstWidth, dstY+dstHeight, dstX, dstY+dstHeight);
+					indices.push(offset+0, offset+1, offset+2, offset+0, offset+2, offset+3);
+					offset += 4;
+					gl.uniform1i(program.textureLocation, 5);
+					*/
 				}
+				
 
-				gl.uniform1i(program.textureLocation, 4);
-				
-				var texMatrix = [
-					srcWidth/img_width, 0, 0, 0,
-					0, srcHeight/img_height, 0,  0,
-					0, 0, 1, 0,
-					srcX/img_width, srcY/img_height, 0,  1
-				];				
-				
-				gl.uniformMatrix4fv(program.textureMatrixLocation, false, texMatrix);
-				
-				var img_transform = [
-					dstWidth,   0,            0,  0,
-					0,          dstHeight,    0,  0,
-					0,          0,            1,  0,
-					dstX,       dstY,         0,  1
-				];
-
-				var matrix = matrixMultiply(img_transform, _this._transform);							
-				
-				//var points = [0, 0, 1, 0, 1, 1, 0, 1]
-				var points = [0, 0, 1, 0, 1, 1, 0, 1]
-				
 				//TODO: canvasMark fails when I enable clipping on drawImage
-				_this.__prepare_clip();	
-				
-				_this._draw_shadow(matrix, temp_z_index, function() {	
-					gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);				
+				_this.__prepare_clip();				
+				_this._draw_shadow(_this.projectionMatrix, temp_z_index, function() {					
+					gl.bindBuffer(gl.ARRAY_BUFFER, program.texCoordBuffer);
+					gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(texPoints), gl.STATIC_DRAW);
+					gl.vertexAttribPointer(program.texCoordLocation, 2, gl.FLOAT, false, 0, 0);						
+					gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);	
 					gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(points), gl.STATIC_DRAW);
-					gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
+					gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, program.indexBuffer);
+					gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices.b, gl.STATIC_DRAW);	
+					gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);								
+					gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
 				});
 				temp_z_index -= EPSILON;
-				
-				matrix = matrixMultiply(matrix, _this.projectionMatrix);
-				gl.uniformMatrix4fv(program.transformLocation, false, matrix);
+
+				var transform = matrixMultiply(_this._transform, _this.projectionMatrix);
+				gl.uniformMatrix4fv(program.transformLocation, false, transform);
 				gl.uniform1f(program.globalAlphaLocation, _this.globalAlpha);
-				
-				gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);
-				gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);	
+
+				gl.bindBuffer(gl.ARRAY_BUFFER, program.texCoordBuffer);
+				gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(texPoints), gl.STATIC_DRAW);
+				gl.vertexAttribPointer(program.texCoordLocation, 2, gl.FLOAT, false, 0, 0);						
+				gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);					
 				gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(points), gl.STATIC_DRAW);
+				gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, program.indexBuffer);
+				gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices.b, gl.STATIC_DRAW);	
+				gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);								
+				gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
 				
 				gl.uniform1f(program.zindexLocation, temp_z_index);
-				gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);	
+				gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
 				temp_z_index -= EPSILON;
 				
 				_this.__execute_clip(temp_z_index)
@@ -2506,9 +2672,12 @@
 		}
 	};
 
+	var color_table = {};
 	function parseColor(css_str) {
+		if (color_table[css_str]) return color_table[css_str];
 		var temp = parseCSSColor(css_str);
 		temp[0] /= 255; temp[1] /= 255; temp[2] /= 255; 
+		color_table[css_str] = temp;
 		return temp;
 	}
 	
