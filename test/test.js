@@ -26,12 +26,11 @@ function do_test(test) {
 
 window.onload = function() {
 	do_test(function(ctx, canvas) {
-		ctx.fillStyle = '#f00';
-		ctx.fillRect(0, 0, 100, 50);
-		ctx.shadowColor = '#0f0';
-		ctx.shadowBlur = 0;
-		ctx.shadowOffsetX = 0;
-		ctx.shadowOffsetY = 50;
-		ctx.fillRect(0, 0, 100, 50);
+		var image = document.getElementById("source");
+		ctx.drawImage(image, 0, 0, 100, 100, 0, 0, 100, 100);
+		
+		var data = ctx.getImageData(0,0,100,100);
+		ctx.putImageData(data, 100, 100);
+		
 	});	
 }
