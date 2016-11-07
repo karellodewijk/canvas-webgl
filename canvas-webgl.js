@@ -300,9 +300,9 @@
 			return this.left.insert_rect(rect);
 		},
 		insert_rect_partition(rect, xOffset, yOffset) {
-			if (rect.w < 50 && rect.h < 50) return [null]; //partitioning further just doesn't make sense
 			var node = this.insert_rect(rect);
 			if (node == null) {
+				if (rect.w <= 1 && rect.h <= 1) return [null]; //partitioning further just doesn't make sense
 				var rect1, rect2, xOffset2, yOffset2;
 				if (rect.w >= rect.h) {
 					rect1 = new Rect(0, 0, Math.round(rect.w/2), rect.h);
@@ -329,17 +329,79 @@
 		this.root.rect = new Rect(0, 0, width, height);
 		gl.activeTexture(gl.TEXTURE4);
 		this.texture = gl.createTexture();
+		this.width = width;
+		this.height = height;
 		gl.bindTexture(gl.TEXTURE_2D, this.texture);
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+		this.colorAtlas = {};
 		
 		//the things we need to do to crealte a wxh blank texture
 		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(width*height*4));
 	}
 	
 	TextureManager.prototype = {
-		set_texture(img) {
+		//returns texture coords for a color
+		set_color(color) {
+			var gl = this.gl;
+			gl.activeTexture(gl.TEXTURE4);
+			gl.bindTexture(gl.TEXTURE_2D, this.texture);
+			if (!this.colorAtlas[color]) {
+				var rect = new Rect(0, 0, 1, 1);
+				var node = this.root.insert_rect(rect);
+				var texColor = new Uint8Array([color[0]*255, color[1]*255, color[2]*255, color[3]*255]);
+				gl.texSubImage2D(gl.TEXTURE_2D, 0, node.rect.x, node.rect.y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, texColor);
+				this.colorAtlas[color] = [node.rect.x, node.rect.y];
+			}
+			return this.colorAtlas[color];
+		},
+		//copies a into texture map. after this function img.nodes will contain the coord(s) of the image within
+		//the texture map. Note that the image may be split into multiple rectangles.
+		set_texture_from_texture(img, ctx) {
+			var gl = this.gl;
+			var _this = this;
+			var copy_texture = function(node) {				
+				var framebuffer = gl.createFramebuffer();
+				framebuffer.width = img.width;
+				framebuffer.height = img.height;	
+				gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);				
+				gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, img, 0);
+				
+				gl.activeTexture(gl.TEXTURE4);
+				gl.bindTexture(gl.TEXTURE_2D, _this.texture);
+				
+				gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, node.rect.x, node.rect.y, node.x, node.y, node.rect.w, node.rect.h);				
+			}
+			if (!img.nodes) {
+				var rect = new Rect(0, 0, img.width, img.height);	
+				img.nodes = this.root.insert_rect_partition(rect, 0, 0);
+				
+				if (img.nodes.length == 1) {
+					var node = img.nodes[0];
+					if (node == null) {
+						console.warn("Texture full: contact the canvas-webgl API developer for a fix");
+					} else {
+						copy_texture(node);
+					}
+				} else {
+					for (var i in img.nodes) {
+						var node = img.nodes[i];
+						if (node == null) {
+							console.warn("Texture full: contact the canvas-webgl API developer for a fix");
+							continue;
+						}
+						copy_texture(node);
+					}
+				}
+				gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+			}			
+			gl.activeTexture(gl.TEXTURE4);
+			gl.bindTexture(gl.TEXTURE_2D, this.texture);
+		},
+		//copies the img or canvas to the texture map. after this function img.nodes will contain the coord(s) of the image within
+		//the texture map. Note that the image may be split into multiple rectangles.
+		set_texture_from_img(img) {
 			var gl = this.gl;
 			gl.activeTexture(gl.TEXTURE4);
 			gl.bindTexture(gl.TEXTURE_2D, this.texture);		
@@ -365,7 +427,7 @@
 						ctx.drawImage(img, node.x, node.y, node.rect.w, node.rect.h, 0, 0, node.rect.w, node.rect.h);
 						gl.texSubImage2D(gl.TEXTURE_2D, 0, node.rect.x, node.rect.y, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
 					}
-				}				
+				}
 			}			
 			if (img instanceof HTMLCanvasElement) {
 				//canvas has no associated texture space or the canvas is grown
@@ -797,6 +859,7 @@
 			
 			var texture = gl.createTexture();		
 			gl.bindTexture(gl.TEXTURE_2D, texture);
+			
 			gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, framebuffer.width, framebuffer.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
 			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
 			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
@@ -808,7 +871,7 @@
 
 			var tempFrameBuffer = gl.getParameter(gl.FRAMEBUFFER_BINDING);
 			gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
-			
+						
 			//draw
 			var program = ctx._select_program(ctx.gradient_program);
 			
@@ -1285,7 +1348,7 @@
 			}
 		});
 		Object.defineProperty(gl.canvas, "height", {
-			set: function myProperty(new_height) {
+			set: function myProperty(new_height) {			
 				heightProp.set.call(gl.canvas, new_height);
 				_this._resize();
 			},
@@ -1554,22 +1617,28 @@
 			}
 			
 			var gl = this.gl;
-			//select the right program
-			var program;
+			
+			if (!this.textureManager) {
+				this.textureManager = new TextureManager(gl, MAX_TEXTURE_SIZE, MAX_TEXTURE_SIZE);
+			}
+			
+			var tex_offsets;
+			var flat_color = true;
 			if (this.strokeStyleRGBA instanceof WebGLTexture) {
-				program = this._select_program(this.texture_program);			
-				gl.activeTexture(gl.TEXTURE2);
-				gl.bindTexture(gl.TEXTURE_2D, this.strokeStyleRGBA);
-				gl.uniform1i(program.textureLocation, 2);
+				this.strokeStyleRGBA.width = this.width;
+				this.strokeStyleRGBA.height = this.height;
+				this.textureManager.set_texture_from_texture(this.strokeStyleRGBA, this);
+				flat_color = false;
+				tex_offsets = [this.strokeStyleRGBA.nodes[0].rect.x, this.strokeStyleRGBA.nodes[0].rect.y];
 			} else {
-				program = this._select_program(this.simple_program);	
-				gl.uniform4fv(program.colorLocation, this.strokeStyleRGBA);
+				tex_offsets = this.textureManager.set_color(this.strokeStyleRGBA);
 			}
 			
 			if (!_path.stroke_lineWidth || _path.stroke_lineWidth != this.lineWidth) {
 				//buffer is only correct for a certain linewidth
 				_path.stroke_buffered = 0;
 				_path.stroke_lineWidth = this.lineWidth; 
+				_path.stroke_texPoints = new TypedArray(Float32Array);
 				_path.stroke_vertices = new TypedArray(Float32Array);
 				_path.stroke_indices = new TypedArray(Uint16Array);
 			}
@@ -1577,37 +1646,21 @@
 			for (;_path.stroke_buffered < _path.paths.length; _path.stroke_buffered++) {
 				var i = _path.stroke_buffered;
 				var currentPath = _path.paths[i];
-				if (currentPath.length > 2)
+				if (currentPath.length > 2) {
 					this.__strokePath(currentPath, _path.closed[i], _path.stroke_vertices, _path.stroke_indices);
+					if (flat_color) {
+						for (var j = _path.stroke_texPoints.length; j < _path.stroke_vertices.length; j+=2) {
+							_path.stroke_texPoints.push((tex_offsets[0]+0.5)/MAX_TEXTURE_SIZE, (tex_offsets[1]+0.5)/MAX_TEXTURE_SIZE);
+						}
+					} else {
+						for (var j = _path.stroke_texPoints.length; j < _path.stroke_vertices.length; j+=2) {
+							_path.stroke_texPoints.push((tex_offsets[0]+_path.stroke_vertices.b[j])/MAX_TEXTURE_SIZE, 
+													  (tex_offsets[1]+this.height-_path.stroke_vertices.b[j+1])/MAX_TEXTURE_SIZE);
+						}
+					}
+				}
 			}
-			
-			this.__prepare_clip();
-			var _this = this;
-			this._draw_shadow(this._transform, this.currentZIndex, function() {
-				gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);					
-				gl.bufferData(gl.ARRAY_BUFFER, _path.stroke_vertices.b, gl.STATIC_DRAW);
-				gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, program.indexBuffer);
-				gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, _path.stroke_indices.b, gl.STATIC_DRAW);	
-				gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);
-				gl.drawElements(gl.TRIANGLES, _path.stroke_indices.length, gl.UNSIGNED_SHORT, 0);
-			});
-
-			this.currentZIndex -= EPSILON;
-			var transform = matrixMultiply(this._transform, this.projectionMatrix);
-			gl.uniformMatrix4fv(program.transformLocation, false, transform);
-			gl.uniform1f(program.globalAlphaLocation, this.globalAlpha);
-			this._set_zindex();
-			
-			gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);					
-			gl.bufferData(gl.ARRAY_BUFFER, _path.stroke_vertices.b, gl.STATIC_DRAW);
-			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, program.indexBuffer);
-			gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, _path.stroke_indices.b, gl.STATIC_DRAW);	
-			gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);
-			gl.drawElements(gl.TRIANGLES, _path.stroke_indices.length, gl.UNSIGNED_SHORT, 0);
-			
-			this.__execute_clip(this.currentZIndex)
-			this.currentZIndex -= EPSILON;
-			
+			this.__draw(_path.stroke_vertices, _path.stroke_indices, _path.stroke_texPoints);	
 		},
 		clip(path) {
 			var _path = this.path;
@@ -1758,20 +1811,11 @@
 		get canvas() { return this.gl.canvas; },
 		get height() { return this.canvas.height; },
 		get width() { return this.canvas.width; },
-		_resize() {
+		_resize() {			
 			var gl = this.gl;
-			
-			gl.viewport(0,0,gl.canvas.width, gl.canvas.height);
-			
+
 			gl.clear(gl.COLOR_BUFFER_BIT);
 			
-			this.projectionMatrix = [ //flips y, shift scale from [width, height] to [-1, 1]
-				2/gl.canvas.width,  0,                   0, 0,
-				0,                  -2/gl.canvas.height, 0, 0,
-				0,                  0,                   1, 0,
-				-1,                 1,                   0, 1
-			];
-
 			this.resetTransform();
 			
 			this.path = new Path2D();
@@ -1787,6 +1831,7 @@
 			delete this.imageTexture;
 			delete this.cachedImage;
 			delete this.textRenderCanvas;
+			delete this.TextureManager;
 		},
 		createLinearGradient(x0, y0, x1, y1) {
 			return new LinearGradient(x0, y0, x1, y1);			
@@ -1934,8 +1979,6 @@
 			return program;
 		},
 		_draw_shadow(transform, z_index, draw_cb) {
-			//return;
-			
 			if (this.shadowOffsetX == 0 && this.shadowOffsetY==0 && this.shadowBlur == 0) return;
 						
 			var gl = this.gl;
@@ -2105,68 +2148,24 @@
 			gl.bindTexture(gl.TEXTURE_2D, old_texture_binding);				
 			gl.bindBuffer(gl.ARRAY_BUFFER, old_renderbuffer);	
 		},
-		fill(path) {
-			var _path = this.path;
-			if(path) {  
-				_path = path;
-			}
-						
-			var gl = this.gl;			
-			var program;
+		__draw(vertices, indices, texCoords) {
+			var gl = this.gl;
 			
-			if (this.fillStyleRGBA instanceof WebGLTexture) {
-				program = this._select_program(this.texture_program);
-				gl.activeTexture(gl.TEXTURE2);
-				gl.bindTexture(gl.TEXTURE_2D, this.fillStyleRGBA);
-				gl.uniform1i(program.textureLocation, 2);
-			} else {
-				program = this._select_program(this.simple_program);
-				gl.uniform4fv(program.colorLocation, this.fillStyleRGBA);
-			}
-
-			if (!_path.fill_vertices) {
-				_path.fill_buffered = 0;
-				_path.fill_vertices = new TypedArray(Float32Array);
-				_path.fill_indices = new TypedArray(Uint16Array);
-			}
+			var program = this._select_program(this.image_program);
+			gl.uniform1i(program.textureLocation, 4);
 			
-			var vertices = new TypedArray(Float32Array);
-			var indices = new TypedArray(Uint16Array);
-			
-			for (;_path.fill_buffered < _path.paths.length; _path.fill_buffered++) {
-				var i = _path.fill_buffered;
-				var currentPath = _path.paths[i];
-				var closed = currentPath[0] == currentPath[currentPath.length-2] && currentPath[1] == currentPath[currentPath.length-1];			
-				if (!closed) {
-					currentPath.push(currentPath[0],  currentPath[1]);
-				}
-				var triangles = earcut(currentPath);
-				
-				if (triangles.length > 0) {
-					var offset = vertices.length/2;
-					for (var j in triangles) {
-						_path.fill_indices.push(offset+triangles[j]);
-					}
-					for (var j in currentPath) {
-						_path.fill_vertices.push(currentPath[j])
-					}
-				}
-				if (!closed) {
-					currentPath.pop();
-					currentPath.pop();
-				}
-			}
-			
-			this.__prepare_clip();
-			
+			this.__prepare_clip();		
 			var _this = this;		
 			this._draw_shadow(this._transform, this.currentZIndex, function() {	
+				gl.bindBuffer(gl.ARRAY_BUFFER, program.texCoordBuffer);
+				gl.bufferData(gl.ARRAY_BUFFER, texCoords.b, gl.STATIC_DRAW);
+				gl.vertexAttribPointer(program.texCoordLocation, 2, gl.FLOAT, false, 0, 0);	
 				gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);					
-				gl.bufferData(gl.ARRAY_BUFFER, _path.fill_vertices.b, gl.STATIC_DRAW);
+				gl.bufferData(gl.ARRAY_BUFFER,vertices.b, gl.STATIC_DRAW);
 				gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, program.indexBuffer);
-				gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, _path.fill_indices.b, gl.STATIC_DRAW);	
-				gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);
-				gl.drawElements(gl.TRIANGLES, _path.fill_indices.length, gl.UNSIGNED_SHORT, 0);
+				gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices.b, gl.STATIC_DRAW);	
+				gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);			
+				gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);	
 			});
 			this.currentZIndex -=EPSILON;
 
@@ -2174,16 +2173,89 @@
 			gl.uniformMatrix4fv(program.transformLocation, false, transform);
 			this._set_zindex();
 			gl.uniform1f(program.globalAlphaLocation, this.globalAlpha);
-	
+
+			gl.bindBuffer(gl.ARRAY_BUFFER, program.texCoordBuffer);
+			gl.bufferData(gl.ARRAY_BUFFER, texCoords.b, gl.STATIC_DRAW);
+			gl.vertexAttribPointer(program.texCoordLocation, 2, gl.FLOAT, false, 0, 0);	
 			gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);					
-			gl.bufferData(gl.ARRAY_BUFFER, _path.fill_vertices.b, gl.STATIC_DRAW);
+			gl.bufferData(gl.ARRAY_BUFFER,vertices.b, gl.STATIC_DRAW);
 			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, program.indexBuffer);
-			gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, _path.fill_indices.b, gl.STATIC_DRAW);	
+			gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices.b, gl.STATIC_DRAW);	
 			gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);			
-			gl.drawElements(gl.TRIANGLES, _path.fill_indices.length, gl.UNSIGNED_SHORT, 0);
+			gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);	
 			
 			this.__execute_clip(this.currentZIndex)
 			this.currentZIndex -=EPSILON;
+		},
+		fill(path) {
+			var _path = this.path;
+			if(path) {  
+				_path = path;
+			}
+						
+			var gl = this.gl;			
+			
+			if (!this.textureManager) {
+				this.textureManager = new TextureManager(gl, MAX_TEXTURE_SIZE, MAX_TEXTURE_SIZE);
+			}
+			
+			var tex_offsets;
+			var flat_color = true;
+			if (this.fillStyleRGBA instanceof WebGLTexture) {
+				this.fillStyleRGBA.width = this.width;
+				this.fillStyleRGBA.height = this.height;
+				this.textureManager.set_texture_from_texture(this.fillStyleRGBA, this);
+				flat_color = false;
+				tex_offsets = [this.fillStyleRGBA.nodes[0].rect.x, this.fillStyleRGBA.nodes[0].rect.y];
+			} else {
+				tex_offsets = this.textureManager.set_color(this.fillStyleRGBA);
+			}
+
+			if (!_path.fill_vertices) {
+				_path.fill_buffered = 0;
+				_path.fill_vertices = new TypedArray(Float32Array);
+				_path.fill_indices = new TypedArray(Uint16Array);
+				_path.fill_texPoints = new TypedArray(Float32Array);
+			}
+			
+			for (;_path.fill_buffered < _path.paths.length; _path.fill_buffered++) {
+				var i = _path.fill_buffered;
+				var currentPath = _path.paths[i];
+
+				if (currentPath.length < 6) continue;
+				
+				var closed = currentPath[0] == currentPath[currentPath.length-2] && currentPath[1] == currentPath[currentPath.length-1];			
+				if (!closed) {
+					currentPath.push(currentPath[0], currentPath[1]);
+				}
+				var triangles = earcut(currentPath);			
+				
+				var offset = _path.fill_vertices.length/2;
+				if (triangles.length > 0) {					
+					for (var j in triangles) {
+						_path.fill_indices.push(offset+triangles[j]);
+					}
+					for (var j in currentPath) {
+						_path.fill_vertices.push(currentPath[j]);
+					}
+				}
+				if (!closed) {
+					currentPath.pop();
+					currentPath.pop();
+				}
+				if (flat_color) {
+					for (var j = _path.fill_texPoints.length; j < _path.fill_vertices.length; j+=2) {
+						_path.fill_texPoints.push((tex_offsets[0]+0.5)/MAX_TEXTURE_SIZE, (tex_offsets[1]+0.5)/MAX_TEXTURE_SIZE);
+					}
+				} else {
+					for (var j = _path.fill_texPoints.length; j < _path.fill_vertices.length; j+=2) {
+						_path.fill_texPoints.push((tex_offsets[0]+_path.fill_vertices.b[j])/MAX_TEXTURE_SIZE, 
+												  (tex_offsets[1]+this.height-_path.fill_vertices.b[j+1])/MAX_TEXTURE_SIZE);
+					}
+				}
+			}
+			
+			this.__draw(_path.fill_vertices, _path.fill_indices, _path.fill_texPoints);
 			
 		},
 		fillRect(x, y, width, height) {
@@ -2514,7 +2586,6 @@
 			
 			var _this = this;
 			var image_loaded = function() {
-				var program = _this._select_program(_this.image_program);
 				var img_width, img_height;
 				if (img instanceof HTMLImageElement) {
 					img_width = img.naturalWidth;
@@ -2549,107 +2620,40 @@
 				var scaleX = dstWidth / srcWidth;
 				var scaleY = dstHeight / srcHeight;
 
-				var points = [];
-				var texPoints = [];
-				var indices = new TypedArray(Uint16Array);		
+				var points = new TypedArray(Float32Array);
+				var texPoints = new TypedArray(Float32Array);
+				var indices = new TypedArray(Uint16Array);
+
 				var offset = 0;
-				
-				//if (img instanceof HTMLImageElement) {
-				if (true) {
-					//use texture caching
-					_this.textureManager.set_texture(img);
-			
-					for (var i in img.nodes) {
-						var node = img.nodes[i];
-						
-						if (!node || srcX+srcWidth <= node.x || srcY+srcHeight <= node.y || srcX > node.x+node.rect.w || srcY > node.y+node.rect.h) continue;
 
-						var x = Math.max(node.rect.x, node.rect.x + srcX - node.x);
-						var y = Math.max(node.rect.y, node.rect.y + srcY - node.y);
-						var w = Math.min(srcX + srcWidth - node.x, node.x + node.rect.w) - Math.max(0, srcX - node.x)
-						var h = Math.min(srcY + srcHeight - node.y, node.y + node.rect.h) - Math.max(0, srcY - node.y)
-
-						texPoints.push(x/MAX_TEXTURE_SIZE, y/MAX_TEXTURE_SIZE, (x+w)/MAX_TEXTURE_SIZE, y/MAX_TEXTURE_SIZE, (x+w)/MAX_TEXTURE_SIZE, (y+h)/MAX_TEXTURE_SIZE, x/MAX_TEXTURE_SIZE, (y+h)/MAX_TEXTURE_SIZE);
-						
-						var dx = dstX + Math.max(0, (node.x - srcX) * scaleX);
-						var dy = dstY + Math.max(0, (node.y - srcY) * scaleY);
-						var dw = w * scaleX;
-						var dh = h * scaleY;
-						
-						points.push(dx, dy, dx+dw, dy, dx+dw, dy+dh, dx, dy+dh);
-						
-						indices.push(offset+0, offset+1, offset+2, offset+0, offset+2, offset+3);
-						offset += 4;			
-					}
-					gl.uniform1i(program.textureLocation, 4);
-				} else {
-					/*
-					//do not use texture cache
-					gl.activeTexture(gl.TEXTURE5);		
-					if (!_this.imageTexture) {
-						_this.imageTexture = gl.createTexture();
-						gl.bindTexture(gl.TEXTURE_2D, _this.imageTexture);
-						gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-						gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-						gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-					}					
-					gl.bindTexture(gl.TEXTURE_2D, _this.imageTexture);
-					if (img_width <= MAX_TEXTURE_SIZE && img_height <= MAX_TEXTURE_SIZE) {	
-						gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
-					} else {
-						console.warn("Texture too large >MAX_TEXTURE_SIZEpx. using canvas fallback.");
-						var canvas = document.createElement('canvas');
-						canvas.width = srcWidth;
-						canvas.height = srcHeight;
-						var ctx = canvas.getContext('2d')
-						ctx.drawImage(img, srcX, srcY, srcWidth, srcHeight, 0, 0, srcWidth, srcHeight);
-						gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
-						srcX = 0; srcY=0; img_width=srcWidth; img_height=srcHeight;
-					}
+				//use texture caching
+				_this.textureManager.set_texture_from_img(img);
+		
+				for (var i in img.nodes) {
+					var node = img.nodes[i];
 					
-					texPoints.push(srcX/img_width, srcY/img_height, (srcX+srcWidth)/img_width, srcY/img_height, (srcX+srcWidth)/img_width, (srcY+srcHeight)/img_height, srcX/img_width, (srcY+srcHeight)/img_height);
-					points.push(dstX, dstY, dstX+dstWidth, dstY, dstX+dstWidth, dstY+dstHeight, dstX, dstY+dstHeight);
+					if (!node || srcX+srcWidth <= node.x || srcY+srcHeight <= node.y || srcX > node.x+node.rect.w || srcY > node.y+node.rect.h) continue;
+
+					var x = Math.max(node.rect.x, node.rect.x + srcX - node.x);
+					var y = Math.max(node.rect.y, node.rect.y + srcY - node.y);
+					var w = Math.min(srcX + srcWidth - node.x, node.x + node.rect.w) - Math.max(0, srcX - node.x)
+					var h = Math.min(srcY + srcHeight - node.y, node.y + node.rect.h) - Math.max(0, srcY - node.y)
+		
+					//texPoints.push((x+0.5)/MAX_TEXTURE_SIZE, (y+0.5)/MAX_TEXTURE_SIZE, (x+w+0.5)/MAX_TEXTURE_SIZE, (y+0.5)/MAX_TEXTURE_SIZE, (x+w+0.5)/MAX_TEXTURE_SIZE, (y+h+0.5)/MAX_TEXTURE_SIZE, (x+0.5)/MAX_TEXTURE_SIZE, (y+h+0.5)/MAX_TEXTURE_SIZE);
+					texPoints.push((x)/MAX_TEXTURE_SIZE, (y)/MAX_TEXTURE_SIZE, (x+w)/MAX_TEXTURE_SIZE, (y)/MAX_TEXTURE_SIZE, (x+w)/MAX_TEXTURE_SIZE, (y+h)/MAX_TEXTURE_SIZE, (x)/MAX_TEXTURE_SIZE, (y+h)/MAX_TEXTURE_SIZE);
+					
+					var dx = dstX + Math.max(0, (node.x - srcX) * scaleX);
+					var dy = dstY + Math.max(0, (node.y - srcY) * scaleY);
+					var dw = w * scaleX;
+					var dh = h * scaleY;
+					
+					points.push(dx, dy, dx+dw, dy, dx+dw, dy+dh, dx, dy+dh);
+					
 					indices.push(offset+0, offset+1, offset+2, offset+0, offset+2, offset+3);
-					offset += 4;
-					gl.uniform1i(program.textureLocation, 5);
-					*/
+					offset += 4;			
 				}
-				
 
-				//TODO: canvasMark fails when I enable clipping on drawImage
-				_this.__prepare_clip();				
-				_this._draw_shadow(_this.projectionMatrix, temp_z_index, function() {					
-					gl.bindBuffer(gl.ARRAY_BUFFER, program.texCoordBuffer);
-					gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(texPoints), gl.STATIC_DRAW);
-					gl.vertexAttribPointer(program.texCoordLocation, 2, gl.FLOAT, false, 0, 0);						
-					gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);	
-					gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(points), gl.STATIC_DRAW);
-					gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, program.indexBuffer);
-					gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices.b, gl.STATIC_DRAW);	
-					gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);								
-					gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
-				});
-				temp_z_index -= EPSILON;
-
-				var transform = matrixMultiply(_this._transform, _this.projectionMatrix);
-				gl.uniformMatrix4fv(program.transformLocation, false, transform);
-				gl.uniform1f(program.globalAlphaLocation, _this.globalAlpha);
-
-				gl.bindBuffer(gl.ARRAY_BUFFER, program.texCoordBuffer);
-				gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(texPoints), gl.STATIC_DRAW);
-				gl.vertexAttribPointer(program.texCoordLocation, 2, gl.FLOAT, false, 0, 0);						
-				gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);					
-				gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(points), gl.STATIC_DRAW);
-				gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, program.indexBuffer);
-				gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices.b, gl.STATIC_DRAW);	
-				gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);								
-				gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
-				
-				gl.uniform1f(program.zindexLocation, temp_z_index);
-				gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
-				temp_z_index -= EPSILON;
-				
-				_this.__execute_clip(temp_z_index)
+				_this.__draw(points, indices, texPoints);
 			}
 			
 			if (img.complete || (!(img instanceof HTMLImageElement))) {

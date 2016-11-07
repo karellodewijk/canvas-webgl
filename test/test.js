@@ -5,7 +5,7 @@ function test_webgl(test) {
 	canvas.height = 300;
 	ctx = canvas.getContext('webgl-2d');
 	document.body.appendChild(canvas);
-	test(ctx);
+	test(ctx, canvas);
 }
 
 function test_canvas(test) {
@@ -15,7 +15,7 @@ function test_canvas(test) {
 	canvas.height = 300;
 	ctx = canvas.getContext('2d');
 	document.body.appendChild(canvas);
-	test(ctx);
+	test(ctx, canvas);
 }
 
 function do_test(test) {
@@ -25,16 +25,13 @@ function do_test(test) {
 }
 
 window.onload = function() {
-	do_test(function(ctx) {
-		var canvas = document.createElement('canvas');
-		ctx2 = canvas.getContext('2d');
-		ctx2.moveTo(0,0);
-		ctx2.lineTo(200,100);
-		ctx2.stroke();
-		ctx.drawImage(0, 0, 0, 100, 100, 0, 0, 100, 100);
-		//var image = document.getElementById("asteroid1.png");
-		//ctx.drawImage(image, 0, 2850, 64, 64, 0, 0, 64, 64);
-		//ctx.drawImage(image, 0, 2850, 64, 64, 0, 0, 64, 64);
-		//console.log(image.nodes);
+	do_test(function(ctx, canvas) {
+		ctx.fillStyle = '#f00';
+		ctx.fillRect(0, 0, 100, 50);
+		ctx.shadowColor = '#0f0';
+		ctx.shadowBlur = 0;
+		ctx.shadowOffsetX = 0;
+		ctx.shadowOffsetY = 50;
+		ctx.fillRect(0, 0, 100, 50);
 	});	
 }
