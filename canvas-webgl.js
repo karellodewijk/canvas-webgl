@@ -760,7 +760,7 @@
 				return prev_stop[1];
 			} else {
 				var w = ((u - prev_stop[0]) / (next_stop[0] - prev_stop[0]))
-				var color = [(1-w) * prev_stop[1][0] + (1) * next_stop[1][0], (1-w) * prev_stop[1][1] + w * next_stop[1][1], (1-w) * prev_stop[1][2] + w * next_stop[1][2], (1-w) * prev_stop[1][3] + w * next_stop[1][3]];
+				var color = [(1-w) * prev_stop[1][0] + w * next_stop[1][0], (1-w) * prev_stop[1][1] + w * next_stop[1][1], (1-w) * prev_stop[1][2] + w * next_stop[1][2], (1-w) * prev_stop[1][3] + w * next_stop[1][3]];
 				return color;
 			}		
 		},
@@ -2486,6 +2486,7 @@
 			// text rendering in webgl is somewhat beyond the scope of this project/
 			// Text will probably never look good rendered this way anyway.
 			var _ctx = _canvas.getContext("2d");
+
 			_ctx.clearRect(0, 0, _canvas.width, _canvas.height);
 			
 			if (_ctx.font != this.font) _ctx.font = this.font;
@@ -2670,7 +2671,9 @@
 	HTMLCanvasElement.prototype.getContext = function(id) {	
 		if (id == 'webgl-2d') {
 			if (!this.__context2d) {
-				this.__context2d = new CanvasRenderingContext2D(orig_getContext.apply(this, ['webgl', {preserveDrawingBuffer: true}]));
+				let orig_contect = orig_getContext.apply(this, ['webgl', {preserveDrawingBuffer: true}])
+				//this.__context2d = new CanvasRenderingContext2D(WebGLDebugUtils.makeDebugContext(orig_contect));
+				this.__context2d = new CanvasRenderingContext2D(orig_contect);
 			}
 			return this.__context2d;
 		} else {
