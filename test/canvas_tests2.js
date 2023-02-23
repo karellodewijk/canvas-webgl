@@ -39,6 +39,13 @@ window.onload = function() {
 		ctx.fillRect(10,10,200,100);
 	});
 	do_test(function(ctx) {	
+		var gradient = ctx.createLinearGradient(0,0,200,200);
+		gradient.addColorStop(0,"green");
+		gradient.addColorStop(1,"white");
+		ctx.fillStyle = gradient;
+		ctx.fillRect(10,10,200,200);
+	});
+	do_test(function(ctx) {	
 		var gradient = ctx.createRadialGradient(100,100,100,100,100,0);
 		gradient.addColorStop(0,"white");
 		gradient.addColorStop(1,"green");
