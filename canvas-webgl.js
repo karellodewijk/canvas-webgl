@@ -6,1111 +6,8 @@
 	var ARC_RESOLUTION = 5;  //space between interpolation points for quadratic and bezier curve approx. in pixels. Also used for linejoins and linecaps
 	var SQRT_2 = Math.sqrt(2);
 	var MAX_TEXTURE_SIZE = 4096;
-	
-	var shadow_fragment_shader = `
-	    precision mediump float;
-	
-		uniform sampler2D texture;
-		uniform vec4 u_shadow_color;
-		uniform vec2 u_direction;
-		uniform float u_gauss_coeff[100]; //we will rarely send 100 coeff
-		uniform float u_global_alpha;
-		 
-		varying vec2 v_texcoord;
+	var DEBUG = false; //depends on WebGLDebugUtils being imported previous to this
 
-		/*
-		//returns vec4(0,0,0,0) when coords are out of bounds
-		//TODO: this seems expensive, but couldn't find a better way
-		//where is gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, (some option saying no-wrap, return 0 vect));
-		vec4 get_color(sampler2D tex, vec2 coord) {
-			if (coord.x < 0.0 || coord.x > 1.0 || coord.y < 0.0 || coord.y > 1.0) {
-				return vec4(0.0);
-			}
-			return texture2D(tex, coord);
-		}
-		*/
-			
-		void main() {
-			vec4 color = texture2D(texture, v_texcoord)* u_gauss_coeff[0];
-			for (int i = 1; i < 100; i++) {
-				if (u_gauss_coeff[i] == 0.0) break;
-			    color += texture2D(texture, v_texcoord + float(i) * u_direction) * u_gauss_coeff[i];
-			    color += texture2D(texture, v_texcoord - float(i) * u_direction) * u_gauss_coeff[i];
-		    }  
-			gl_FragColor = vec4(u_shadow_color.xyz, u_shadow_color.w * color.w * u_global_alpha);
-		}
-	`
-	
-	var shadow_vertex_shader = `
-		attribute vec2 a_position;
-		uniform float u_zindex;
-		uniform vec2 u_offset;
-		
-		varying vec2 v_texcoord;
-		
-		void main() {
-		   gl_Position = vec4(a_position, u_zindex, 1);
-		   v_texcoord = 0.5 * (gl_Position.xy  + 1.0) + u_offset; //-1,1 -> 0,1
-		}
-	`
-
-		var image_draw_vertex_shader2 = `
-		attribute vec2 a_position;
-		attribute vec2 a_texcoord;
-		
-		uniform float u_zindex;
-		uniform mat4 u_matrix;
-		
-		varying vec2 v_texcoord;
-
-		void main() {
-		  gl_Position = u_matrix * vec4(a_position, u_zindex, 1);
-		  v_texcoord = a_texcoord;
-		}
-	`
-	
-	var image_draw_fragment_shader2 = `	
-		precision mediump float;
-
-		uniform sampler2D texture;
-		uniform float u_global_alpha;
-		
-		varying vec2 v_texcoord;
-		
-
-		void main() {
-		   gl_FragColor = texture2D(texture, v_texcoord);
-		   gl_FragColor.w *= u_global_alpha;
-		}
-	`
-
-	var texture_draw_vertex_shader = `
-		attribute vec2 a_position;
-		uniform float u_zindex;
-		uniform mat4 u_matrix;
-		
-		varying vec2 v_texcoord;
-		
-		void main() {
-		    gl_Position = u_matrix * vec4(a_position, u_zindex, 1);
-			v_texcoord = 0.5 * (gl_Position.xy + 1.0); //-1,1 -> 0,1
-		}
-	`
-	
-	var texture_draw_fragment_shader = `	
-		precision mediump float;
-		uniform sampler2D texture;
-		uniform float u_global_alpha;
-		
-		varying vec2 v_texcoord;
-		 
-		void main() {
-		   gl_FragColor = texture2D(texture, v_texcoord);
-		   gl_FragColor.w *= u_global_alpha;
-		}
-	`
-	
-	var direct_texture_draw_vertex_shader =  `		
-		attribute vec2 a_position;
-		attribute vec2 a_texcoord;
-		
-		uniform float u_zindex;
-		uniform mat4 u_matrix;
-
-		varying vec2 v_texcoord;
-
-		void main()	{
-		    gl_Position = u_matrix * vec4(a_position, u_zindex, 1);
-			v_texcoord = a_texcoord;
-		}
-	`
-
-	var simple_draw_vertex_shader = `
-		attribute vec2 a_position;
-		uniform float u_zindex;
-		uniform mat4 u_matrix;
-
-		void main() {
-		  gl_Position = u_matrix * vec4(a_position, u_zindex, 1);
-		}
-	`
-	
-	var simple_draw_fragment_shader = `	
-		precision mediump float;
-
-		uniform vec4 u_color;
-		uniform float u_global_alpha;
-
-		void main() {
-		   gl_FragColor = u_color;
-		   gl_FragColor.w *= u_global_alpha;
-		}
-	`
-
-	var gradient_vertex_shader = `
-		attribute vec2 a_position;
-		attribute vec4 a_color;
-		uniform float u_zindex;
-		uniform mat4 u_matrix;
-		
-		varying vec4 v_color;
-		
-		void main() {
-		  gl_Position = u_matrix * vec4(a_position, u_zindex, 1);
-		  v_color = a_color;
-		}
-	`
-	
-	var gradient_fragment_shader = `	
-		precision mediump float;
-
-		varying vec4 v_color;
-		
-		void main() {
-		   gl_FragColor = v_color;
-		}
-	`
-	
-	var circle_gradient_vertex_shader = `
-		attribute vec2 a_position;
-		
-		uniform vec3 a_circle1;
-		uniform vec3 a_circle2;
-		uniform vec4 a_color1;
-		uniform vec4 a_color2;
-		
-		uniform float u_zindex;
-		uniform mat4 u_matrix;
-
-		varying vec3 circle1;
-		varying vec3 circle2;
-		varying vec4 color1;
-		varying vec4 color2;
-		
-		void main() {
-		  gl_Position = u_matrix * vec4(a_position, u_zindex, 1);
-		  circle1 = a_circle1;
-		  circle2 = a_circle2;
-		  color1 = a_color1;
-		  color2 = a_color2;
-		}
-	`
-	
-	var circle_gradient_fragment_shader = `	
-		precision mediump float;
-
-		uniform vec3 circle1;
-		uniform vec3 circle2;
-		uniform vec4 color1;
-		uniform vec4 color2;
-		
-		void main() {
-			float dx1 =  gl_FragCoord.x - circle1.x;
-			float dy1 =  gl_FragCoord.y - circle1.y;
-			float l1 = sqrt(dx1*dx1 + dy1*dy1) - circle1.z;
-
-			float dx2 =  gl_FragCoord.x - circle2.x;
-			float dy2 =  gl_FragCoord.y - circle2.y;
-			float l2 = sqrt(dx2*dx2 + dy2*dy2) - circle2.z;
-			
-			float w = l2 / (l2-l1);
-			
-			if (w < 0.0) {
-				discard;
-			}
-			if (w > 1.0) {
-				discard;
-			}
-			
-			w = max(w, 0.0);
-	
-			gl_FragColor = w * color1 + (1.0 - w) * color2;
-		}
-	`
-	
-	//quick wrapper around a typed array that supports push and auto-grow mechanics akin to std::vector
-	//It's not great but performance should be better than Array for fixed types and it avoids conversions
-	//NOTE: only supports push/length, everything else should be done by .b var which contains the actual buffer
-	var TypedArray = function(BufferType, length) {
-		if (!length) length = 10;
-		this.b = new BufferType(10);
-		this.length = 0;
-	}
-
-	TypedArray.prototype = {
-		push() {
-			if (this.length + arguments.length > this.b.length) {
-				//grow buffer
-				var new_b = new this.b.constructor(Math.max(this.length+arguments.length, Math.round(this.b.length * 2)));
-				new_b.set(this.b, 0);
-				this.b = new_b;
-			}
-			for (var i = 0; i < arguments.length; i++) {
-				this.b[this.length++] = arguments[i];
-			}
-			return this.length;	
-		}
-	}
-	
-	//2d bin packing algorihm, taken from https://github.com/mackstann/binpack
-    function Rect(x, y, w, h) {
-        this.x = x;
-        this.y = y;
-        this.w = w;
-        this.h = h;
-    }
-    Rect.prototype.fits_in = function(outer) {
-        return outer.w >= this.w && outer.h >= this.h;
-    }
-    Rect.prototype.same_size_as = function(other) {
-        return this.w == other.w && this.h == other.h;
-    }	
-    function Node() {
-        this.left = null;
-        this.right = null;
-        this.rect = null;
-        this.filled = false;
-    }
-    Node.prototype = {
-		insert_rect(rect) {
-			if(this.left != null)
-				return this.left.insert_rect(rect) || this.right.insert_rect(rect);
-			if(this.filled)
-				return null;
-			if(!rect.fits_in(this.rect))
-				return null;
-			if(rect.same_size_as(this.rect)) {
-				this.filled = true;
-				return this;
-			}
-			this.left = new Node();
-			this.right = new Node();
-			var width_diff = this.rect.w - rect.w;
-			var height_diff = this.rect.h - rect.h;
-			var me = this.rect;
-			if(width_diff > height_diff) {
-				// split literally into left and right, putting the rect on the left.
-				this.left.rect = new Rect(me.x, me.y, rect.w, me.h);
-				this.right.rect = new Rect(me.x + rect.w, me.y, me.w - rect.w, me.h);
-			} else {
-				// split into top and bottom, putting rect on top.
-				this.left.rect = new Rect(me.x, me.y, me.w, rect.h);
-				this.right.rect = new Rect(me.x, me.y + rect.h, me.w, me.h - rect.h);
-			}
-			return this.left.insert_rect(rect);
-		},
-		insert_rect_partition(rect, xOffset, yOffset) {
-			var node = this.insert_rect(rect);
-			if (node == null) {
-				if (rect.w <= 1 && rect.h <= 1) return [null]; //partitioning further just doesn't make sense
-				var rect1, rect2, xOffset2, yOffset2;
-				if (rect.w >= rect.h) {
-					rect1 = new Rect(0, 0, Math.round(rect.w/2), rect.h);
-					rect2 = new Rect(0, 0, rect.w - Math.round(rect.w/2), rect.h);
-					xOffset2 = xOffset + Math.round(rect.w/2);
-					yOffset2 = yOffset;
-				} else {
-					rect1 = new Rect(0, 0, rect.w, Math.round(rect.h/2));
-					rect2 = new Rect(0, 0, rect.w, rect.h - Math.round(rect.h/2));
-					xOffset2 = xOffset;
-					yOffset2 = yOffset + Math.round(rect.h/2);					
-				}
-				return this.insert_rect_partition(rect2, xOffset2 , yOffset2).concat(this.insert_rect_partition(rect1, xOffset, yOffset));
-			}
-			node.x = xOffset;
-			node.y = yOffset;
-			return [node];
-		}
-    }
-	
-	function TextureManager(gl, width, height) {
-		this.gl = gl;
-		this.root = new Node();
-		this.root.rect = new Rect(0, 0, width, height);
-		gl.activeTexture(gl.TEXTURE4);
-		this.texture = gl.createTexture();
-		this.width = width;
-		this.height = height;
-		gl.bindTexture(gl.TEXTURE_2D, this.texture);
-		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-		this.colorAtlas = {};
-		
-		//the things we need to do to crealte a wxh blank texture
-		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(width*height*4));
-	}
-	
-	TextureManager.prototype = {
-		//returns texture coords for a color
-		set_color(color) {
-			var gl = this.gl;
-			gl.activeTexture(gl.TEXTURE4);
-			gl.bindTexture(gl.TEXTURE_2D, this.texture);
-			if (!this.colorAtlas[color]) {
-				var rect = new Rect(0, 0, 1, 1);
-				var node = this.root.insert_rect(rect);
-				var texColor = new Uint8Array([color[0]*255, color[1]*255, color[2]*255, color[3]*255]);
-				gl.texSubImage2D(gl.TEXTURE_2D, 0, node.rect.x, node.rect.y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, texColor);
-				this.colorAtlas[color] = [node.rect.x, node.rect.y];
-			}
-			return this.colorAtlas[color];
-		},
-		//copies a into texture map. after this function img.nodes will contain the coord(s) of the image within
-		//the texture map. Note that the image may be split into multiple rectangles.
-		set_texture_from_texture(img, ctx) {
-			var gl = this.gl;
-			var _this = this;
-			var copy_texture = function(node) {				
-				var framebuffer = gl.createFramebuffer();
-				framebuffer.width = img.width;
-				framebuffer.height = img.height;	
-				gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);				
-				gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, img, 0);
-				
-				gl.activeTexture(gl.TEXTURE4);
-				gl.bindTexture(gl.TEXTURE_2D, _this.texture);
-				
-				gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, node.rect.x, node.rect.y, node.x, node.y, node.rect.w, node.rect.h);				
-			}
-			if (!img.nodes) {
-				var rect = new Rect(0, 0, img.width, img.height);	
-				img.nodes = this.root.insert_rect_partition(rect, 0, 0);
-				
-				if (img.nodes.length == 1) {
-					var node = img.nodes[0];
-					if (node == null) {
-						console.warn("Texture full: contact the canvas-webgl API developer for a fix");
-					} else {
-						copy_texture(node);
-					}
-				} else {
-					for (var i in img.nodes) {
-						var node = img.nodes[i];
-						if (node == null) {
-							console.warn("Texture full: contact the canvas-webgl API developer for a fix");
-							continue;
-						}
-						copy_texture(node);
-					}
-				}
-				gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-			}			
-			gl.activeTexture(gl.TEXTURE4);
-			gl.bindTexture(gl.TEXTURE_2D, this.texture);
-		},
-		//copies the img or canvas to the texture map. after this function img.nodes will contain the coord(s) of the image within
-		//the texture map. Note that the image may be split into multiple rectangles.
-		set_texture_from_img(img) {
-			var gl = this.gl;
-			gl.activeTexture(gl.TEXTURE4);
-			gl.bindTexture(gl.TEXTURE_2D, this.texture);		
-			var write_texture = function() {
-				if (img.nodes.length == 1) {
-					var node = img.nodes[0];
-					if (node == null) {
-						console.warn("Texture full: contact the canvas-webgl API developer for a fix");
-					} else {
-						gl.texSubImage2D(gl.TEXTURE_2D, 0, node.rect.x, node.rect.y, gl.RGBA, gl.UNSIGNED_BYTE, img);
-					}
-				} else {
-					for (var i in img.nodes) {
-						var node = img.nodes[i];
-						if (node == null) {
-							console.warn("Texture full: contact the canvas-webgl API developer for a fix");
-							continue;
-						}
-						var canvas = document.createElement('canvas');
-						canvas.width = node.rect.w;
-						canvas.height = node.rect.h;
-						var ctx = canvas.getContext('2d');
-						ctx.drawImage(img, node.x, node.y, node.rect.w, node.rect.h, 0, 0, node.rect.w, node.rect.h);
-						gl.texSubImage2D(gl.TEXTURE_2D, 0, node.rect.x, node.rect.y, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
-					}
-				}
-			}			
-			if (img instanceof HTMLCanvasElement) {
-				//canvas has no associated texture space or the canvas is grown
-				if (!img.nodes || img.width > img.orig_width || img.height > img.orig_height) {
-					var w = img.orig_width ? Math.max(img.width, img.orig_width) : img.width;
-					var h = img.orig_height ? Math.max(img.height, img.orig_height) : img.height;
-					var rect = new Rect(0, 0, w, h);
-					img.orig_height = w;
-					img.orig_width = h;
-					img.nodes = this.root.insert_rect_partition(rect, 0, 0);
-				}
-				write_texture(); //always overwrite the texture space as canvas may have changed
-			} else {
-				if (!img.nodes) {
-					var rect = new Rect(0, 0, img.width, img.height);
-					img.nodes = this.root.insert_rect_partition(rect, 0, 0);
-					write_texture();
-				}
-			}
-		}
-	}
-	
-	function matrixMultiply(a, b) {
-	  return[ a[0]  * b[0] + a[1]  * b[4]  + a[2]  * b[8]  + a[3]  * b[12], //0,0
-	          a[0]  * b[1] + a[1]  * b[5]  + a[2]  * b[9]  + a[3]  * b[13], //0,1
-			  a[0]  * b[2] + a[1]  * b[6]  + a[2]  * b[10] + a[3]  * b[14], //0,2
-			  a[0]  * b[3] + a[1]  * b[7]  + a[2]  * b[11] + a[3]  * b[15], //0,3		
-			  a[4]  * b[0] + a[5]  * b[4]  + a[6]  * b[8]  + a[7]  * b[12], //1,0
-			  a[4]  * b[1] + a[5]  * b[5]  + a[6]  * b[9]  + a[7]  * b[13], //1,1
-			  a[4]  * b[2] + a[5]  * b[6]  + a[6]  * b[10] + a[7]  * b[14], //1,2
-			  a[4]  * b[3] + a[5]  * b[7]  + a[6]  * b[11] + a[7]  * b[15], //1,3
-			  a[8]  * b[0] + a[9]  * b[4]  + a[10] * b[8]  + a[11] * b[12], //2,0
-			  a[8]  * b[1] + a[9]  * b[5]  + a[10] * b[9]  + a[11] * b[13], //2,1
-			  a[8]  * b[2] + a[9]  * b[6] + a[10] * b[10] + a[11] * b[14], //2,2
-			  a[8]  * b[3] + a[9]  * b[7] + a[10] * b[11] + a[11] * b[15], //2,3
-			  a[12] * b[0] + a[13] * b[4]  + a[14] * b[8]  + a[15] * b[12], //3,0
-			  a[12] * b[1] + a[13] * b[5]  + a[14] * b[9]  + a[15] * b[13], //3,1
-			  a[12] * b[2] + a[13] * b[6] + a[14] * b[10] + a[15] * b[14], //3,2
-			  a[12] * b[3] + a[13] * b[7] + a[14] * b[11] + a[15] * b[15] ]//3,3
-	}
-
-	//from: http://www.blackpawn.com/texts/pointinpoly/default.html
-	function is_in_triangle(px,py,ax,ay,bx,by,cx,cy) {
-		var v0 = [cx-ax,cy-ay];
-		var v1 = [bx-ax,by-ay];
-		var v2 = [px-ax,py-ay];
-
-		var dot00 = (v0[0]*v0[0]) + (v0[1]*v0[1]);
-		var dot01 = (v0[0]*v1[0]) + (v0[1]*v1[1]);
-		var dot02 = (v0[0]*v2[0]) + (v0[1]*v2[1]);
-		var dot11 = (v1[0]*v1[0]) + (v1[1]*v1[1]);
-		var dot12 = (v1[0]*v2[0]) + (v1[1]*v2[1]);
-
-		var invDenom = 1/ (dot00 * dot11 - dot01 * dot01);
-
-		var u = (dot11 * dot02 - dot01 * dot12) * invDenom;
-		var v = (dot00 * dot12 - dot01 * dot02) * invDenom;
-
-		return ((u >= 0) && (v >= 0) && (u + v <= 1));
-	}
-	
-	function matrixVectorMultiply(m, v) {
-		return  [ m[0*4 + 0] * v[0] + m[0*4 + 1] * v[1] + m[0*4 + 2] * v[2] + m[0*4 + 3] * v[3],
-				  m[1*4 + 0] * v[0] + m[1*4 + 1] * v[1] + m[1*4 + 2] * v[2] + m[1*4 + 3] * v[3],
-				  m[2*4 + 0] * v[0] + m[2*4 + 1] * v[1] + m[2*4 + 2] * v[2] + m[2*4 + 3] * v[3],
-				  m[3*4 + 0] * v[0] + m[3*4 + 1] * v[1] + m[3*4 + 2] * v[2] + m[3*4 + 3] * v[3] ];
-	}
-	
-	function vectTransform(m, v) {
-		return  [m[0] * v[0] + m[1] * v[1] + m[12],
-				 m[4] * v[0] + m[5] * v[1] + m[13]];
-	}
-	
-	function vectSvgTransform(m, v) {
-		return  [m.a * v[0] + m.c * v[1] + m.e,
-				 m.b * v[0] + m.d * v[1] + m.f];
-	}
-
-	function _add_arc(triangle_buffer, x, y, radius, startAngle, endAngle, anticlockwise) {
-		//bring angles all in [0, 2*PI] range
-		startAngle = startAngle % (2 * Math.PI);
-		endAngle = endAngle % (2 * Math.PI);
-		if (startAngle < 0) startAngle += 2*Math.PI;
-		if (endAngle < 0) endAngle += 2*Math.PI;
-
-		if (startAngle>=endAngle) {
-			endAngle += 2 * Math.PI;
-		}
-		var diff = endAngle - startAngle;
-		
-		var direction = 1;
-		if (anticlockwise) {
-			direction = -1;			
-			diff = 2*Math.PI - diff;
-			if (diff == 0) diff = 2*Math.PI;
-		}
-		
-		var length = diff * radius;
-		var nr_of_interpolation_points = length / ARC_RESOLUTION;		
-		var dangle = diff / nr_of_interpolation_points;
-		
-		var angle = startAngle;
-		for (var j = 0; j < nr_of_interpolation_points+1; j++) {
-			triangle_buffer.push(x, y, x + radius * Math.cos(angle), y + radius * Math.sin(angle));
-			angle += direction * dangle;
-		}
-	}
-	
-	function _add_dashed_arc(triangle_buffer, center, a, b, lineWidthDiv2, interpolation_scale, to_draw) {
-		var start_angle = Math.atan2(a[1] - center[1], a[0] - center[0]);
-		var stop_angle = Math.atan2(b[1] - center[1], b[0] - center[0]);
-		if (start_angle > stop_angle) { 
-			stop_angle += 2 * Math.PI;
-		}
-		var diff = stop_angle - start_angle;						
-		var nr_of_interpolation_points = Math.ceil(interpolation_scale * lineWidthDiv2) + 1;		
-		var dangle = diff / nr_of_interpolation_points;
-
-		var angle = start_angle + dangle;
-		for (var j = 0; j < nr_of_interpolation_points - 1; j++) {
-			var x = center[0] + lineWidthDiv2 * Math.cos(angle);
-			var y = center[1] + lineWidthDiv2 * Math.sin(angle);
-			triangle_buffer.push(center[0], center[1], to_draw, x, y, to_draw);
-			angle += dangle;
-		}
-	}
-	
-	var CanvasPattern = function(image, repetition) {
-		this.image = image;
-		if (repetition === null || repetition == "") {
-			this.repetition = 'repeat';
-		} else {
-			this.repetition = repetition;
-		}
-		this.thisImplementsCanvasPattern = true;
-	}
-	
-	CanvasPattern.prototype = {
-		_generateTexture(ctx, width, height) {
-			var gl = ctx.gl;
-			var program = ctx._select_program(ctx.image_program);
-
-			//This is our input texture
-			gl.activeTexture(gl.TEXTURE1);
-			var temp_texture = gl.createTexture();
-			gl.bindTexture(gl.TEXTURE_2D, temp_texture);
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);		
-			gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, this.image);
-			gl.uniform1i(program.textureLocation, 1);
-
-			//This will be our output texture
-			gl.activeTexture(gl.TEXTURE0);
-			var texture = gl.createTexture();
-			gl.bindTexture(gl.TEXTURE_2D, texture);	
-			var framebuffer = gl.createFramebuffer();
-			gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
-			framebuffer.width = width;
-			framebuffer.height = height;		
-			
-			gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, framebuffer.width, framebuffer.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-			gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
-			gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
-			
-			gl.activeTexture(gl.TEXTURE0);
-			gl.bindTexture(gl.TEXTURE_2D, texture);					
-	
-			var texPoints = [0, 0, 1, 0, 1, 1, 0, 1];			
-			gl.bindBuffer(gl.ARRAY_BUFFER, program.texCoordBuffer);
-			gl.vertexAttribPointer(program.texCoordLocation, 2, gl.FLOAT, false, 0, 0);				
-			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(texPoints), gl.STATIC_DRAW);
-			
-			gl.uniformMatrix4fv(program.transformLocation, false, ctx.projectionMatrix);
-			
-			var iw, ih;
-			if (this.image instanceof HTMLImageElement) {
-				iw = this.image.naturalWidth; ih = this.image.naturalHeight; 
-			} else {
-				iw = this.image.width; ih = this.image.height;
-			}
-			
-			if (this.repetition == 'repeat-x') {
-				height =  ih;
-			} else if (this.repetition == 'repeat-y') {
-				width = iw;
-			} else if (this.repetition == 'no-repeat') {
-				width = iw;
-				height =  ih;
-			}				
-
-			if (iw > 0 && ih > 0) {
-				for (var x=0; x < width; x+=iw) {
-					for (var y=0; y < height; y+=ih) {				
-						var points = [x, y, x+iw, y, x+iw, y+ih, x, y+ih];
-						gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);
-						gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);				
-						gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(points), gl.STATIC_DRAW);
-						gl.drawArrays(gl.TRIANGLE_FAN, 0, points.length/2);
-					}
-				}
-			}
-
-			gl.bindTexture(gl.TEXTURE_2D, null);
-			gl.bindFramebuffer(gl.FRAMEBUFFER, null);			
-			return texture;
-		}
-	}
-	
-	var RadialGradient = function(x0, y0, r0, x1, y1, r1) {
-		this.circle1 = [x0, y0, r0];
-		this.circle2 = [x1, y1, r1];
-		this.colorStops = [];
-	}
-	
-	RadialGradient.prototype = {
-		addColorStop(offset, color) {
-			this.colorStops.push([offset, parseColor(color)]);
-			this.colorStops.sort(function(a, b) {
-			  return a[0] - b[0];
-			});
-		},		
-		_generateTexture(ctx, width, height) {
-			//prepare texture
-			var gl = ctx.gl;
-			
-			var framebuffer = gl.createFramebuffer();
-			gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
-			framebuffer.width = width;
-			framebuffer.height = height;
-			
-			var texture = gl.createTexture();		
-			gl.bindTexture(gl.TEXTURE_2D, texture);
-			gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, framebuffer.width, framebuffer.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-			
-			gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
-			gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
-
-			var program = ctx._select_program(ctx.circle_program);
-			var vertices =  [0, 0, width, 0, width, height, 0, height];
-			
-			gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);			
-			gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);	
-			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);	
-				
-			var inner_stop;
-			var inner_circle;
-			if (this.circle1[2] > this.circle2[2]) {
-				gl.clearColor(this.colorStops[0][1][0], this.colorStops[0][1][1], this.colorStops[0][1][2], this.colorStops[0][1][3]);
-				inner_circle = this.circle2;
-				inner_stop = this.colorStops[this.colorStops.length-1];
-			} else {
-				gl.clearColor(this.colorStops[this.colorStops.length-1][1][0], this.colorStops[this.colorStops.length-1][1][1], this.colorStops[this.colorStops.length-1][1][2], this.colorStops[this.colorStops.length-1][1][3]);
-				inner_circle = this.circle1;
-				inner_stop = this.colorStops[0];
-			}
-			gl.clear(gl.COLOR_BUFFER_BIT);
-			
-			for (var i = 1; i < this.colorStops.length; i++) {
-				ctx._set_zindex();
-				
-				var x = (this.circle2[0]-this.circle1[0]) * this.colorStops[i-1][0] + this.circle1[0];
-				var y = (this.circle2[1]-this.circle1[1]) * this.colorStops[i-1][0] + this.circle1[1];
-				var r = (this.circle2[2]-this.circle1[2]) * this.colorStops[i-1][0] + this.circle1[2];
-				
-				var x2 = (this.circle2[0]-this.circle1[0]) * this.colorStops[i][0] + this.circle1[0];
-				var y2 = (this.circle2[1]-this.circle1[1]) * this.colorStops[i][0] + this.circle1[1];
-				var r2 = (this.circle2[2]-this.circle1[2]) * this.colorStops[i][0] + this.circle1[2];
-
-				gl.uniform3f(program.circle1Location, x, height-y, r);
-				gl.uniform3f(program.circle2Location, x2, height-y2, r2);
-				gl.uniform4f(program.color1Location, this.colorStops[i-1][1][0], this.colorStops[i-1][1][1], this.colorStops[i-1][1][2], this.colorStops[i-1][1][3]);
-				gl.uniform4f(program.color2Location, this.colorStops[i][1][0], this.colorStops[i][1][1], this.colorStops[i][1][2], this.colorStops[i][1][3]);
-				
-				gl.drawArrays(gl.TRIANGLE_FAN, 0, vertices.length/2);
-			}
-
-			gl.uniform3f(program.circle2Location, inner_circle[0], height - inner_circle[1], inner_circle[2]);
-			gl.uniform3f(program.circle1Location, inner_circle[0], height - inner_circle[1], 0);
-			gl.uniform4f(program.color1Location, inner_stop[1][0], inner_stop[1][1], inner_stop[1][2], inner_stop[1][3]);
-			gl.uniform4f(program.color2Location, inner_stop[1][0], inner_stop[1][1], inner_stop[1][2], inner_stop[1][3]);
-
-			gl.drawArrays(gl.TRIANGLE_FAN, 0, vertices.length/2);
-			
-			//retore the buffer we were drawing in
-			gl.bindTexture(gl.TEXTURE_2D, null);
-			gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-
-			return texture;				
-		}
-	}
-	
-	var LinearGradient = function(x0, y0, x1, y1) {
-		this.colorStops = [];
-		this.line = [x1 - x0, y1 - y0];
-		this.base = [x0, y0];
-		
-		//we precaculate |line|^2, as we'll be using it alot
-		this.len_sq = Math.pow(this.line[0],2) + Math.pow(this.line[1], 2);
-	}
-		
-	LinearGradient.prototype = {
-		addColorStop(offset, color) {
-			this.colorStops.push([offset, parseColor(color)]);
-			this.colorStops.sort(function(a, b) {
-			  return a[0] - b[0];
-			});
-		},
-		_calculate_color(x,y) {
-			//project [x,y]-base onto line. proj = [x.y].line / |line|^2 * line;
-			var u = ((x - this.base[0]) * this.line[0] + (y - this.base[1]) * this.line[1]) / this.len_sq;
-			//now u is our offset
-			var prev_stop, next_stop = this.colorStops[0];
-			for (var i = this.colorStops.length-1; i >= 0; i--) {	
-				if (u > this.colorStops[i][0]) {
-					prev_stop = this.colorStops[i];
-					next_stop = this.colorStops[i+1];
-					break;
-				}
-			}		
-			if (!prev_stop) {
-				return next_stop[1];
-			} else if (!next_stop) {
-				return prev_stop[1];
-			} else {
-				var w = ((u - prev_stop[0]) / (next_stop[0] - prev_stop[0]))
-				var color = [(1-w) * prev_stop[1][0] + w * next_stop[1][0], (1-w) * prev_stop[1][1] + w * next_stop[1][1], (1-w) * prev_stop[1][2] + w * next_stop[1][2], (1-w) * prev_stop[1][3] + w * next_stop[1][3]];
-				return color;
-			}		
-		},
-		_generateTexture(ctx, width, height) {
-			function intersection(box, p, v) {
-				//AABB ray intersection, slab method
-				var tmin = -999999, tmax = 999999;				
-				if (v[0] != 0) {
-					var tx1 = (box.x - p[0])/v[0];
-					var tx2 = (box.x + box.width - p[0])/v[0];
-					tmin = Math.max(tmin, Math.min(tx1, tx2));
-					tmax = Math.min(tmax, Math.max(tx1, tx2));
-				}
-				if (v[1] != 0) {
-					var ty1 = (box.x - p[1])/v[1];
-					var ty2 = (box.y + box.height - p[1])/v[1];
-					tmin = Math.max(tmin, Math.min(ty1, ty2));
-					tmax = Math.min(tmax, Math.max(ty1, ty2));
-				}
-				if (tmax >= tmin) { //tmin != tmax is technically an intersection in the corner, but we don't need that
-					var s1 = [p[0] + tmin * v[0], p[1] + tmin * v[1]]
-					var s2 = [p[0] + tmax * v[0], p[1] + tmax * v[1]]
-					return [s1, s2];
-				} else {
-					return [];
-				}
-			}
-			
-			var line_orth = [-this.line[1], this.line[0]];
-			var box = { x:0, y:0, width:width, height:height }	
-			
-			//find intersections
-			var intersections = []
-			for (var i = 0; i < this.colorStops.length; i++) {
-				var p = [this.base[0] + this.colorStops[i][0] * this.line[0], this.base[1] + this.colorStops[i][0] * this.line[1]]
-				var intersection_points = intersection(box, p, line_orth);
-				for (var j in intersection_points) {
-					intersection_points[j].push(this.colorStops[i][1])
-					intersections.push(intersection_points[j]);
-				}
-			}
-			
-			//add corners and the points opposite the corner in direction of line_orth
-			var corners = [[0,0, this._calculate_color(0,0)], [width,0, this._calculate_color(width,0)], [width,height, this._calculate_color(width,height)], [0,height, this._calculate_color(0,height)]]
-			for (var i in corners) {
-				var intersection_points = intersection(box, [corners[i][0], corners[i][1]], line_orth);
-				for (var j in intersection_points) {
-					intersection_points[j].push(corners[i][2])
-					intersections.push(intersection_points[j]);
-				}
-						
-			}
-			
-			//sort in the direction of line
-			var _this = this;
-			intersections.sort(function(a,b) {
-				var comp = ((a[0] - _this.base[0]) * _this.line[0] + (a[1] - _this.base[1]) * _this.line[1])
-				          -((b[0] - _this.base[0]) * _this.line[0] + (b[1] - _this.base[1]) * _this.line[1]);
-				if (comp != 0) return comp;	
-				else {
-					comp = a[0] - b[0]
-					if (comp != 0) return comp;	
-					else {
-						return a[1] - b[1]
-					}
-				}
-			});
-			
-			//make all points unique
-			var unique = [intersections[0]];
-			for (var i = 1; i < intersections.length; i++) {
-				if (intersections[i][0] != intersections[i-1][0] || intersections[i][1] != intersections[i-1][1]) {
-					unique.push(intersections[i]);
-				}
-			}
-			intersections = unique;
-			
-			//the result here is that from a bunch of corners and intersection points, we've built something we can
-			//draw as a gl.TRIANGLE_STRIP.
-			
-			//flatten
-			var vertices = [];
-			var colors = [];
-			for (var i in intersections) {
-				vertices.push(intersections[i][0], intersections[i][1]);
-				colors.push(intersections[i][2][0], intersections[i][2][1], intersections[i][2][2], intersections[i][2][3]);
-			}
-
-			//prepare texture
-			var gl = ctx.gl;
-			
-			var framebuffer = gl.createFramebuffer();
-			gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
-			framebuffer.width = width;
-			framebuffer.height = height;
-			
-			var texture = gl.createTexture();		
-			gl.bindTexture(gl.TEXTURE_2D, texture);
-			
-			gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, framebuffer.width, framebuffer.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-			
-			gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
-			gl.bindTexture(gl.TEXTURE_2D, null);
-			gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-
-			var tempFrameBuffer = gl.getParameter(gl.FRAMEBUFFER_BINDING);
-			gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
-						
-			//draw
-			var program = ctx._select_program(ctx.gradient_program);
-			
-			gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);			
-			gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);	
-			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);	
-			
-			gl.bindBuffer(gl.ARRAY_BUFFER, program.colorBuffer);
-			gl.vertexAttribPointer(program.colorLocation, 4, gl.FLOAT, false, 0, 0);
-			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colors), gl.STATIC_DRAW);			
-
-			gl.activeTexture(gl.TEXTURE0);
-			gl.bindTexture(gl.TEXTURE_2D, texture);
-			gl.drawArrays(gl.TRIANGLE_STRIP, 0, vertices.length/2);
-
-			//retore the buffer we were drawing in
-			gl.bindFramebuffer(gl.FRAMEBUFFER, tempFrameBuffer);
-
-			return texture;				
-		}
-	}
-
-	var ImageData = function() {}
-	
-	var Path2D = function() {
-		this.paths = [[]];
-		this.closed = [false];
-	}
-
-	Path2D.prototype = {
-		addPath(paths, transform) {
-			for (var i in paths) {
-				var path = paths[i];
-				var new_path = [];
-				if (!(typeof transform === undefined)) {
-					for (var j = 0; j < path.length; j+=2) {
-						var point_tranformed = vectSvgTransform(transform, [path[j], path[j+1]]);
-						new_path.push(point_tranformed[0], point_tranformed[1]);
-					}
-				} else {
-					for (var j in path)
-						new_path.push(path[j]);
-				}
-				this.paths.push(new_path);
-				this.closed.push(paths.closed[i]);
-			}
-		},
-		closePath() {
-			if (this.paths.length > 0) {
-				var currentPath = this.paths[this.paths.length-1];
-				if (currentPath.length >= 2) {
-					this.closed[this.paths.length-1] = true;
-					this.paths.push([currentPath[0], currentPath[1]]);
-					this.closed.push(false);
-				}		
-			}
-		},
-		moveTo(x,y) {
-			if (this.paths[this.paths.length-1].length == 0) {
-				this.paths[this.paths.length-1].push(x,y);
-			} else {
-				this.paths.push([x,y]);
-				this.closed.push(false);
-			}
-		},
-		lineTo(x,y) {
-			var currentPath = this.paths[this.paths.length-1];
-			currentPath.push(x,y);
-		},
-		bezierCurveTo(x1, y1, x2, y2, x3, y3) {
-			if (!isFinite(x1) || !isFinite(y1) || !isFinite(x2) || !isFinite(y2) || !isFinite(x3) || !isFinite(y3)) return;
-			
-			var currentPath = this.paths[this.paths.length-1];
-			var x0 = currentPath[currentPath.length-2], y0 = currentPath[currentPath.length-1];
-			function calc(t) {
-				//https://en.wikipedia.org/wiki/B%C3%A9zier_curve#Cubic_B.C3.A9zier_curves
-				var coeff = [Math.pow(1-t, 3), 3 * Math.pow(1-t, 2) * t, 3 * (1-t) * Math.pow(t,2), Math.pow(t,3)];
-				return [coeff[0] * x0 + coeff[1] * x1 + coeff[2] * x2 + coeff[3] * x3, coeff[0] * y0 + coeff[1] * y1 + coeff[2] * y2 + coeff[3] * y3];
-			}
-			var length_estimate =  Math.sqrt(Math.pow(x3 - x2, 2) +  Math.pow(y3 - y2, 2))
-								 + Math.sqrt(Math.pow(x2 - x1, 2) +  Math.pow(y2 - y1, 2))
-								 + Math.sqrt(Math.pow(x1 - x0, 2) +  Math.pow(y1 - y0, 2));							 
-			var step = BEZIER_CURVE_RESOLUTION / length_estimate;
-			step = Math.min(step, 0.5); //do at least 1 step
-			
-			for (var t = step; t < 1; t+=step) {
-				var point = calc(t);
-				currentPath.push(point[0], point[1]);
-			}
-			currentPath.push(x3, y3);
-		},
-		quadraticCurveTo(x1, y1, x2, y2) {
-			if (!isFinite(x1) || !isFinite(y1) || !isFinite(x2) || !isFinite(y2)) return;
-			var currentPath = this.paths[this.paths.length-1];
-			var x0 = currentPath[currentPath.length-2], y0 = currentPath[currentPath.length-1];
-			
-			function calc(t) {
-				//https://en.wikipedia.org/wiki/B%C3%A9zier_curve#Quadratic_B.C3.A9zier_curves
-				var coeff = [Math.pow(1-t, 2), 2 * (1-t) * t, Math.pow(t,2)];
-				return [coeff[0] * x0 + coeff[1] * x1 + coeff[2] * x2, coeff[0] * y0 + coeff[1] * y1 + coeff[2] * y2];
-			}
-			var length_estimate =  Math.sqrt(Math.pow(x2 - x1, 2) +  Math.pow(y2 - y1, 2))
-								 + Math.sqrt(Math.pow(x1 - x0, 2) +  Math.pow(y1 - y0, 2));
-					 
-			var step = BEZIER_CURVE_RESOLUTION / length_estimate;
-			step = Math.min(step, 0.5); //do at least 1 step
-			
-			for (var t = step; t < 1; t+=step) {
-				var point = calc(t);
-				currentPath.push(point[0], point[1]);
-			}
-			currentPath.push(x2, y2);			
-		},
-		ellipse(x, y, radiusX, radiusY, rotation, startAngle, endAngle, anticlockwise) {
-			if (startAngle == endAngle) return;
-			var fullCircle = anticlockwise ? Math.abs(startAngle-endAngle) >= (2*Math.PI) : Math.abs(endAngle-startAngle) >= (2*Math.PI);
-			
-			//bring angles all in [0, 2*PI] range
-			startAngle = startAngle % (2 * Math.PI);
-			endAngle = endAngle % (2 * Math.PI);
-			if (startAngle < 0) startAngle += 2*Math.PI;
-			if (endAngle < 0) endAngle += 2*Math.PI;
-
-			if (startAngle>=endAngle) {
-				endAngle += 2 * Math.PI;
-			}
-
-			var diff = endAngle - startAngle;
-
-			var direction = 1;
-			if (anticlockwise) {
-				direction = -1;			
-				diff = 2*Math.PI - diff;
-			}
-			
-			if (fullCircle) diff = 2*Math.PI;
-			
-			var length = (diff * radiusX + diff * radiusY) / 2; 
-			var nr_of_interpolation_points = length / ARC_RESOLUTION;		
-			var dangle = diff / nr_of_interpolation_points;
-
-			var currentPath = this.paths[this.paths.length-1];
-			
-			var angle = startAngle;
-			var cos_rotation = Math.cos(rotation);
-			var sin_rotation = Math.sin(rotation);
-			for (var j = 0; j < nr_of_interpolation_points; j++) {				
-				var x1 = radiusX * Math.cos(angle);
-				var y1 = radiusY * Math.sin(angle);
-				var x2 = x + x1 * cos_rotation - y1 * sin_rotation;
-				var y2 = y + x1 * sin_rotation + y1 * cos_rotation;		
-				currentPath.push(x2, y2);
-				angle += direction * dangle;
-			}
-			var x1 = radiusX * Math.cos(endAngle);
-			var y1 = radiusY * Math.sin(endAngle);
-			currentPath.push(x + x1 * cos_rotation - y1 * sin_rotation, y + x1 * sin_rotation + y1 * cos_rotation);
-		},
-		arc(x, y, radius, startAngle, endAngle, anticlockwise) {			
-			//bring angles all in [0, 2*PI] range
-			if (startAngle == endAngle) return;
-			var fullCircle = anticlockwise ? Math.abs(startAngle-endAngle) >= (2*Math.PI) : Math.abs(endAngle-startAngle) >= (2*Math.PI);
-
-			startAngle = startAngle % (2 * Math.PI);
-			endAngle = endAngle % (2 * Math.PI);
-			
-			if (startAngle < 0) startAngle += 2*Math.PI;
-			if (endAngle < 0) endAngle += 2*Math.PI;
-
-			if (startAngle>=endAngle) {
-				endAngle += 2 * Math.PI;
-			}
-			
-			var diff = endAngle - startAngle;
-			var direction = 1;
-			if (anticlockwise) {
-				direction = -1;			
-				diff = 2*Math.PI - diff;
-			}
-			
-			if (fullCircle) diff = 2*Math.PI;
-			
-			var length = diff * radius;
-			var nr_of_interpolation_points = length / ARC_RESOLUTION;		
-			var dangle = diff / nr_of_interpolation_points;
-			
-			var currentPath = this.paths[this.paths.length-1];
-
-			var angle = startAngle;
-			for (var j = 0; j < nr_of_interpolation_points; j++) {
-				currentPath.push(x + radius * Math.cos(angle), y + radius * Math.sin(angle));
-				angle += direction * dangle;
-			}
-			currentPath.push(x + radius * Math.cos(endAngle), y + radius * Math.sin(endAngle));
-						
-		},
-		arcTo(x1, y1, x2, y2, radius) {
-			var currentPath = this.paths[this.paths.length-1];
-			var x0 = currentPath[currentPath.length-2], y0 = currentPath[currentPath.length-1];
-			
-			//a = -incoming vector, b = outgoing vector to x1, y1
-			var a = [x0 - x1, y0 - y1];
-			var b = [x2 - x1, y2 - y1];
-			
-			//normalize
-			var l_a = Math.sqrt(Math.pow(a[0], 2) + Math.pow(a[1], 2));
-			var l_b = Math.sqrt(Math.pow(b[0], 2) + Math.pow(b[1], 2));
-			a[0] /= l_a; a[1] /= l_a; b[0] /= l_b; b[1] /= l_b;
-			var angle = Math.atan2(a[1], a[0]) - Math.atan2(b[1], b[0]);
-			
-			//work out tangent points using tan(θ) = opposite / adjacent; angle/2 because hypotenuse is the bisection of a,b
-			var tan_angle_div2 = Math.tan(angle/2);
-			var adj_l = (radius/tan_angle_div2);
-			
-			var tangent_point1 =  [x1 + a[0] * adj_l, y1 + a[1] * adj_l];
-			var tangent_point2 =  [x1 + b[0] * adj_l, y1 + b[1] * adj_l];
-
-			currentPath.push(tangent_point1[0], tangent_point1[1])
-			
-			var bisec = [(a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0];
-			var bisec_l = Math.sqrt(Math.pow(bisec[0], 2) + Math.pow(bisec[1], 2));
-			bisec[0] /= bisec_l; bisec[1] /= bisec_l;
-				
-			var hyp_l = Math.sqrt(Math.pow(radius,2) + Math.pow(adj_l,2))
-			var center = [x1 + hyp_l * bisec[0], y1 + hyp_l * bisec[1]];
-			
-			var startAngle = Math.atan2(tangent_point1[1] - center[1], tangent_point1[0] - center[0]);
-			var endAngle = Math.atan2(tangent_point2[1] - center[1], tangent_point2[0] - center[0]);
-			
-			this.arc(center[0], center[1], radius, startAngle, endAngle)
-			
-			currentPath.push(tangent_point2[0], tangent_point2[1])		
-		},
-		rect(x, y, width, height) {
-			this.paths.push([x, y, x+width, y, x+width, y+height, x, y+height], [x, y]);
-			this.closed.push(true, false);
-		},
-	}
-	
 	var CanvasRenderingContext2D = function(webgl_context) {
 		this.gl = webgl_context;
 		this._set_defaults()
@@ -2629,33 +1526,47 @@
 
 				var offset = 0;
 
-				//use texture caching
-				_this.textureManager.set_texture_from_img(img);
-		
-				for (var i in img.nodes) {
-					var node = img.nodes[i];
-					
-					if (!node || srcX+srcWidth <= node.x || srcY+srcHeight <= node.y || srcX > node.x+node.rect.w || srcY > node.y+node.rect.h) continue;
-
-					var x = Math.max(node.rect.x, node.rect.x + srcX - node.x);
-					var y = Math.max(node.rect.y, node.rect.y + srcY - node.y);
-					var w = Math.min(srcX + srcWidth - node.x, node.x + node.rect.w) - Math.max(0, srcX - node.x)
-					var h = Math.min(srcY + srcHeight - node.y, node.y + node.rect.h) - Math.max(0, srcY - node.y)
-		
-					//texPoints.push((x+0.5)/MAX_TEXTURE_SIZE, (y+0.5)/MAX_TEXTURE_SIZE, (x+w+0.5)/MAX_TEXTURE_SIZE, (y+0.5)/MAX_TEXTURE_SIZE, (x+w+0.5)/MAX_TEXTURE_SIZE, (y+h+0.5)/MAX_TEXTURE_SIZE, (x+0.5)/MAX_TEXTURE_SIZE, (y+h+0.5)/MAX_TEXTURE_SIZE);
-					texPoints.push((x)/MAX_TEXTURE_SIZE, (y)/MAX_TEXTURE_SIZE, (x+w)/MAX_TEXTURE_SIZE, (y)/MAX_TEXTURE_SIZE, (x+w)/MAX_TEXTURE_SIZE, (y+h)/MAX_TEXTURE_SIZE, (x)/MAX_TEXTURE_SIZE, (y+h)/MAX_TEXTURE_SIZE);
-					
-					var dx = dstX + Math.max(0, (node.x - srcX) * scaleX);
-					var dy = dstY + Math.max(0, (node.y - srcY) * scaleY);
-					var dw = w * scaleX;
-					var dh = h * scaleY;
-					
-					points.push(dx, dy, dx+dw, dy, dx+dw, dy+dh, dx, dy+dh);
-					
+				if (img_width * img_height > Math.pow(MAX_TEXTURE_SIZE, 2)) {
+					//draw src directly to texture
+					gl.activeTexture(gl.TEXTURE4);
+					gl.bindTexture(gl.TEXTURE_2D, _this.textureManager.texture);	
+					var canvas = document.createElement('canvas');
+					canvas.width = srcWidth;
+					canvas.height = srcHeight;
+					var ctx = canvas.getContext('2d');
+					ctx.drawImage(img, srcX, srcY, srcWidth, srcHeight, 0, 0, dstWidth, dstHeight);
+					gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
+					points.push(dstX, dstY, dstX + dstWidth, dstY, dstX + dstWidth, dstY + dstHeight, dstX, dstY + dstHeight);
 					indices.push(offset+0, offset+1, offset+2, offset+0, offset+2, offset+3);
-					offset += 4;			
-				}
+					texPoints.push(0, 0, dstWidth/MAX_TEXTURE_SIZE, 0, dstWidth/MAX_TEXTURE_SIZE, dstHeight/MAX_TEXTURE_SIZE, 0, dstHeight/MAX_TEXTURE_SIZE);
+					offset += 4;
+				} else {
+					//use texture caching
+					_this.textureManager.set_texture_from_img(img);
+					for (var i in img.nodes) {
+						var node = img.nodes[i];
+						
+						if (!node || srcX+srcWidth <= node.x || srcY+srcHeight <= node.y || srcX > node.x+node.rect.w || srcY > node.y+node.rect.h) continue;
 
+						var x = Math.max(node.rect.x, node.rect.x + srcX - node.x);
+						var y = Math.max(node.rect.y, node.rect.y + srcY - node.y);
+						var w = Math.min(srcX + srcWidth - node.x, node.x + node.rect.w) - Math.max(0, srcX - node.x)
+						var h = Math.min(srcY + srcHeight - node.y, node.y + node.rect.h) - Math.max(0, srcY - node.y)
+			
+						//texPoints.push((x+0.5)/MAX_TEXTURE_SIZE, (y+0.5)/MAX_TEXTURE_SIZE, (x+w+0.5)/MAX_TEXTURE_SIZE, (y+0.5)/MAX_TEXTURE_SIZE, (x+w+0.5)/MAX_TEXTURE_SIZE, (y+h+0.5)/MAX_TEXTURE_SIZE, (x+0.5)/MAX_TEXTURE_SIZE, (y+h+0.5)/MAX_TEXTURE_SIZE);
+						texPoints.push((x)/MAX_TEXTURE_SIZE, (y)/MAX_TEXTURE_SIZE, (x+w)/MAX_TEXTURE_SIZE, (y)/MAX_TEXTURE_SIZE, (x+w)/MAX_TEXTURE_SIZE, (y+h)/MAX_TEXTURE_SIZE, (x)/MAX_TEXTURE_SIZE, (y+h)/MAX_TEXTURE_SIZE);
+						
+						var dx = dstX + Math.max(0, (node.x - srcX) * scaleX);
+						var dy = dstY + Math.max(0, (node.y - srcY) * scaleY);
+						var dw = w * scaleX;
+						var dh = h * scaleY;
+						
+						points.push(dx, dy, dx+dw, dy, dx+dw, dy+dh, dx, dy+dh);
+						
+						indices.push(offset+0, offset+1, offset+2, offset+0, offset+2, offset+3);
+						offset += 4;			
+					}
+				}
 				_this.__draw(points, indices, texPoints);
 			}
 			
@@ -2672,14 +1583,1122 @@
 		if (id == 'webgl-2d') {
 			if (!this.__context2d) {
 				let orig_contect = orig_getContext.apply(this, ['webgl', {preserveDrawingBuffer: true}])
-				//this.__context2d = new CanvasRenderingContext2D(WebGLDebugUtils.makeDebugContext(orig_contect));
-				this.__context2d = new CanvasRenderingContext2D(orig_contect);
+				if (DEBUG)
+					this.__context2d = new CanvasRenderingContext2D(WebGLDebugUtils.makeDebugContext(orig_contect));
+				else
+					this.__context2d = new CanvasRenderingContext2D(orig_contect);
 			}
 			return this.__context2d;
 		} else {
 			return orig_getContext.apply(this, arguments);
 		}
 	};
+
+	var shadow_fragment_shader = `
+		precision mediump float;
+	
+		uniform sampler2D texture;
+		uniform vec4 u_shadow_color;
+		uniform vec2 u_direction;
+		uniform float u_gauss_coeff[100]; //we will rarely send 100 coeff
+		uniform float u_global_alpha;
+		 
+		varying vec2 v_texcoord;
+
+		/*
+		//returns vec4(0,0,0,0) when coords are out of bounds
+		//TODO: this seems expensive, but couldn't find a better way
+		//where is gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, (some option saying no-wrap, return 0 vect));
+		vec4 get_color(sampler2D tex, vec2 coord) {
+			if (coord.x < 0.0 || coord.x > 1.0 || coord.y < 0.0 || coord.y > 1.0) {
+				return vec4(0.0);
+			}
+			return texture2D(tex, coord);
+		}
+		*/
+			
+		void main() {
+			vec4 color = texture2D(texture, v_texcoord)* u_gauss_coeff[0];
+			for (int i = 1; i < 100; i++) {
+				if (u_gauss_coeff[i] == 0.0) break;
+			    color += texture2D(texture, v_texcoord + float(i) * u_direction) * u_gauss_coeff[i];
+			    color += texture2D(texture, v_texcoord - float(i) * u_direction) * u_gauss_coeff[i];
+		    }  
+			gl_FragColor = vec4(u_shadow_color.xyz, u_shadow_color.w * color.w * u_global_alpha);
+		}
+	`
+	
+	var shadow_vertex_shader = `
+		attribute vec2 a_position;
+		uniform float u_zindex;
+		uniform vec2 u_offset;
+		
+		varying vec2 v_texcoord;
+		
+		void main() {
+		   gl_Position = vec4(a_position, u_zindex, 1);
+		   v_texcoord = 0.5 * (gl_Position.xy  + 1.0) + u_offset; //-1,1 -> 0,1
+		}
+	`
+
+		var image_draw_vertex_shader2 = `
+		attribute vec2 a_position;
+		attribute vec2 a_texcoord;
+		
+		uniform float u_zindex;
+		uniform mat4 u_matrix;
+		
+		varying vec2 v_texcoord;
+
+		void main() {
+		  gl_Position = u_matrix * vec4(a_position, u_zindex, 1);
+		  v_texcoord = a_texcoord;
+		}
+	`
+	
+	var image_draw_fragment_shader2 = `	
+		precision mediump float;
+
+		uniform sampler2D texture;
+		uniform float u_global_alpha;
+		
+		varying vec2 v_texcoord;
+		
+
+		void main() {
+		   gl_FragColor = texture2D(texture, v_texcoord);
+		   gl_FragColor.w *= u_global_alpha;
+		}
+	`
+
+	var texture_draw_vertex_shader = `
+		attribute vec2 a_position;
+		uniform float u_zindex;
+		uniform mat4 u_matrix;
+		
+		varying vec2 v_texcoord;
+		
+		void main() {
+		    gl_Position = u_matrix * vec4(a_position, u_zindex, 1);
+			v_texcoord = 0.5 * (gl_Position.xy + 1.0); //-1,1 -> 0,1
+		}
+	`
+	
+	var texture_draw_fragment_shader = `	
+		precision mediump float;
+		uniform sampler2D texture;
+		uniform float u_global_alpha;
+		
+		varying vec2 v_texcoord;
+		 
+		void main() {
+		   gl_FragColor = texture2D(texture, v_texcoord);
+		   gl_FragColor.w *= u_global_alpha;
+		}
+	`
+	
+	var direct_texture_draw_vertex_shader =  `		
+		attribute vec2 a_position;
+		attribute vec2 a_texcoord;
+		
+		uniform float u_zindex;
+		uniform mat4 u_matrix;
+
+		varying vec2 v_texcoord;
+
+		void main()	{
+		    gl_Position = u_matrix * vec4(a_position, u_zindex, 1);
+			v_texcoord = a_texcoord;
+		}
+	`
+
+	var simple_draw_vertex_shader = `
+		attribute vec2 a_position;
+		uniform float u_zindex;
+		uniform mat4 u_matrix;
+
+		void main() {
+		  gl_Position = u_matrix * vec4(a_position, u_zindex, 1);
+		}
+	`
+	
+	var simple_draw_fragment_shader = `	
+		precision mediump float;
+
+		uniform vec4 u_color;
+		uniform float u_global_alpha;
+
+		void main() {
+		   gl_FragColor = u_color;
+		   gl_FragColor.w *= u_global_alpha;
+		}
+	`
+
+	var gradient_vertex_shader = `
+		attribute vec2 a_position;
+		attribute vec4 a_color;
+		uniform float u_zindex;
+		uniform mat4 u_matrix;
+		
+		varying vec4 v_color;
+		
+		void main() {
+		  gl_Position = u_matrix * vec4(a_position, u_zindex, 1);
+		  v_color = a_color;
+		}
+	`
+	
+	var gradient_fragment_shader = `	
+		precision mediump float;
+
+		varying vec4 v_color;
+		
+		void main() {
+		   gl_FragColor = v_color;
+		}
+	`
+	
+	var circle_gradient_vertex_shader = `
+		attribute vec2 a_position;
+		
+		uniform vec3 a_circle1;
+		uniform vec3 a_circle2;
+		uniform vec4 a_color1;
+		uniform vec4 a_color2;
+		
+		uniform float u_zindex;
+		uniform mat4 u_matrix;
+
+		varying vec3 circle1;
+		varying vec3 circle2;
+		varying vec4 color1;
+		varying vec4 color2;
+		
+		void main() {
+		  gl_Position = u_matrix * vec4(a_position, u_zindex, 1);
+		  circle1 = a_circle1;
+		  circle2 = a_circle2;
+		  color1 = a_color1;
+		  color2 = a_color2;
+		}
+	`
+	
+	var circle_gradient_fragment_shader = `	
+		precision mediump float;
+
+		uniform vec3 circle1;
+		uniform vec3 circle2;
+		uniform vec4 color1;
+		uniform vec4 color2;
+		
+		void main() {
+			float dx1 =  gl_FragCoord.x - circle1.x;
+			float dy1 =  gl_FragCoord.y - circle1.y;
+			float l1 = sqrt(dx1*dx1 + dy1*dy1) - circle1.z;
+
+			float dx2 =  gl_FragCoord.x - circle2.x;
+			float dy2 =  gl_FragCoord.y - circle2.y;
+			float l2 = sqrt(dx2*dx2 + dy2*dy2) - circle2.z;
+			
+			float w = l2 / (l2-l1);
+			
+			if (w < 0.0) {
+				discard;
+			}
+			if (w > 1.0) {
+				discard;
+			}
+			
+			w = max(w, 0.0);
+	
+			gl_FragColor = w * color1 + (1.0 - w) * color2;
+		}
+	`
+	
+	//quick wrapper around a typed array that supports push and auto-grow mechanics akin to std::vector
+	//It's not great but performance should be better than Array for fixed types and it avoids conversions
+	//NOTE: only supports push/length, everything else should be done by .b var which contains the actual buffer
+	var TypedArray = function(BufferType, length) {
+		if (!length) length = 10;
+		this.b = new BufferType(10);
+		this.length = 0;
+	}
+
+	TypedArray.prototype = {
+		push() {
+			if (this.length + arguments.length > this.b.length) {
+				//grow buffer
+				var new_b = new this.b.constructor(Math.max(this.length+arguments.length, Math.round(this.b.length * 2)));
+				new_b.set(this.b, 0);
+				this.b = new_b;
+			}
+			for (var i = 0; i < arguments.length; i++) {
+				this.b[this.length++] = arguments[i];
+			}
+			return this.length;	
+		}
+	}
+	
+	//2d bin packing algorihm, taken from https://github.com/mackstann/binpack
+    function Rect(x, y, w, h) {
+        this.x = x;
+        this.y = y;
+        this.w = w;
+        this.h = h;
+    }
+    Rect.prototype.fits_in = function(outer) {
+        return outer.w >= this.w && outer.h >= this.h;
+    }
+    Rect.prototype.same_size_as = function(other) {
+        return this.w == other.w && this.h == other.h;
+    }	
+    function Node() {
+        this.left = null;
+        this.right = null;
+        this.rect = null;
+        this.filled = false;
+    }
+    Node.prototype = {
+		insert_rect(rect) {
+			if(this.left != null)
+				return this.left.insert_rect(rect) || this.right.insert_rect(rect);
+			if(this.filled)
+				return null;
+			if(!rect.fits_in(this.rect))
+				return null;
+			if(rect.same_size_as(this.rect)) {
+				this.filled = true;
+				return this;
+			}
+			this.left = new Node();
+			this.right = new Node();
+			var width_diff = this.rect.w - rect.w;
+			var height_diff = this.rect.h - rect.h;
+			var me = this.rect;
+			if(width_diff > height_diff) {
+				// split literally into left and right, putting the rect on the left.
+				this.left.rect = new Rect(me.x, me.y, rect.w, me.h);
+				this.right.rect = new Rect(me.x + rect.w, me.y, me.w - rect.w, me.h);
+			} else {
+				// split into top and bottom, putting rect on top.
+				this.left.rect = new Rect(me.x, me.y, me.w, rect.h);
+				this.right.rect = new Rect(me.x, me.y + rect.h, me.w, me.h - rect.h);
+			}
+			return this.left.insert_rect(rect);
+		},
+		insert_rect_partition(rect, xOffset, yOffset) {
+			var node = this.insert_rect(rect);
+			if (node == null) {
+				if (rect.w <= 1 && rect.h <= 1) return [null]; //partitioning further just doesn't make sense
+				var rect1, rect2, xOffset2, yOffset2;
+				if (rect.w >= rect.h) {
+					rect1 = new Rect(0, 0, Math.round(rect.w/2), rect.h);
+					rect2 = new Rect(0, 0, rect.w - Math.round(rect.w/2), rect.h);
+					xOffset2 = xOffset + Math.round(rect.w/2);
+					yOffset2 = yOffset;
+				} else {
+					rect1 = new Rect(0, 0, rect.w, Math.round(rect.h/2));
+					rect2 = new Rect(0, 0, rect.w, rect.h - Math.round(rect.h/2));
+					xOffset2 = xOffset;
+					yOffset2 = yOffset + Math.round(rect.h/2);					
+				}
+				return this.insert_rect_partition(rect2, xOffset2 , yOffset2).concat(this.insert_rect_partition(rect1, xOffset, yOffset));
+			}
+			node.x = xOffset;
+			node.y = yOffset;
+			return [node];
+		}
+    }
+	
+	function TextureManager(gl, width, height) {
+		this.gl = gl;
+		this.root = new Node();
+		this.root.rect = new Rect(0, 0, width, height);
+		gl.activeTexture(gl.TEXTURE4);
+		this.texture = gl.createTexture();
+		this.width = width;
+		this.height = height;
+		gl.bindTexture(gl.TEXTURE_2D, this.texture);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+		this.colorAtlas = {};
+		
+		//the things we need to do to crealte a wxh blank texture
+		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(width*height*4));
+	}
+	
+	TextureManager.prototype = {
+		//returns texture coords for a color
+		set_color(color) {
+			var gl = this.gl;
+			gl.activeTexture(gl.TEXTURE4);
+			gl.bindTexture(gl.TEXTURE_2D, this.texture);
+			if (!this.colorAtlas[color]) {
+				var rect = new Rect(0, 0, 1, 1);
+				var node = this.root.insert_rect(rect);
+				var texColor = new Uint8Array([color[0]*255, color[1]*255, color[2]*255, color[3]*255]);
+				gl.texSubImage2D(gl.TEXTURE_2D, 0, node.rect.x, node.rect.y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, texColor);
+				this.colorAtlas[color] = [node.rect.x, node.rect.y];
+			}
+			return this.colorAtlas[color];
+		},
+		//copies a into texture map. after this function img.nodes will contain the coord(s) of the image within
+		//the texture map. Note that the image may be split into multiple rectangles.
+		set_texture_from_texture(img, ctx) {
+			var gl = this.gl;
+			var _this = this;
+			var copy_texture = function(node) {				
+				var framebuffer = gl.createFramebuffer();
+				framebuffer.width = img.width;
+				framebuffer.height = img.height;	
+				gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);				
+				gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, img, 0);
+				
+				gl.activeTexture(gl.TEXTURE4);
+				gl.bindTexture(gl.TEXTURE_2D, _this.texture);
+				
+				gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, node.rect.x, node.rect.y, node.x, node.y, node.rect.w, node.rect.h);				
+			}
+			if (!img.nodes) {
+				var rect = new Rect(0, 0, img.width, img.height);	
+				img.nodes = this.root.insert_rect_partition(rect, 0, 0);
+				
+				if (img.nodes.length == 1) {
+					var node = img.nodes[0];
+					if (node == null) {
+						console.warn("Texture full: contact the canvas-webgl API developer for a fix");
+					} else {
+						copy_texture(node);
+					}
+				} else {
+					for (var i in img.nodes) {
+						var node = img.nodes[i];
+						if (node == null) {
+							console.warn("Texture full: contact the canvas-webgl API developer for a fix");
+							continue;
+						}
+						copy_texture(node);
+					}
+				}
+				gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+			}			
+			gl.activeTexture(gl.TEXTURE4);
+			gl.bindTexture(gl.TEXTURE_2D, this.texture);
+		},
+		//copies the img or canvas to the texture map. after this function img.nodes will contain the coord(s) of the image within
+		//the texture map. Note that the image may be split into multiple rectangles.
+		set_texture_from_img(img) {
+			var gl = this.gl;
+			gl.activeTexture(gl.TEXTURE4);
+			gl.bindTexture(gl.TEXTURE_2D, this.texture);		
+			var write_texture = function() {
+				if (img.nodes.length == 1) {
+					var node = img.nodes[0];
+					if (node == null) {
+						console.warn("Texture full: contact the canvas-webgl API developer for a fix");
+					} else {
+						gl.texSubImage2D(gl.TEXTURE_2D, 0, node.rect.x, node.rect.y, gl.RGBA, gl.UNSIGNED_BYTE, img);
+					}
+				} else {
+					for (var i in img.nodes) {
+						var node = img.nodes[i];
+						if (node == null) {
+							console.warn("Texture full: contact the canvas-webgl API developer for a fix");
+							continue;
+						}
+						var canvas = document.createElement('canvas');
+						canvas.width = node.rect.w;
+						canvas.height = node.rect.h;
+						var ctx = canvas.getContext('2d');
+						ctx.drawImage(img, node.x, node.y, node.rect.w, node.rect.h, 0, 0, node.rect.w, node.rect.h);
+						gl.texSubImage2D(gl.TEXTURE_2D, 0, node.rect.x, node.rect.y, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
+					}
+				}
+			}			
+			if (img instanceof HTMLCanvasElement) {
+				//canvas has no associated texture space or the canvas is grown
+				if (!img.nodes || img.width > img.orig_width || img.height > img.orig_height) {
+					var w = img.orig_width ? Math.max(img.width, img.orig_width) : img.width;
+					var h = img.orig_height ? Math.max(img.height, img.orig_height) : img.height;
+					var rect = new Rect(0, 0, w, h);
+					img.orig_height = w;
+					img.orig_width = h;
+					img.nodes = this.root.insert_rect_partition(rect, 0, 0);
+				}
+				write_texture(); //always overwrite the texture space as canvas may have changed
+			} else {
+				if (!img.nodes) {
+					var rect = new Rect(0, 0, img.width, img.height);
+					img.nodes = this.root.insert_rect_partition(rect, 0, 0);
+					write_texture();
+				}
+			}
+		}
+	}
+	
+	function matrixMultiply(a, b) {
+	  return[ a[0]  * b[0] + a[1]  * b[4]  + a[2]  * b[8]  + a[3]  * b[12], //0,0
+	          a[0]  * b[1] + a[1]  * b[5]  + a[2]  * b[9]  + a[3]  * b[13], //0,1
+			  a[0]  * b[2] + a[1]  * b[6]  + a[2]  * b[10] + a[3]  * b[14], //0,2
+			  a[0]  * b[3] + a[1]  * b[7]  + a[2]  * b[11] + a[3]  * b[15], //0,3		
+			  a[4]  * b[0] + a[5]  * b[4]  + a[6]  * b[8]  + a[7]  * b[12], //1,0
+			  a[4]  * b[1] + a[5]  * b[5]  + a[6]  * b[9]  + a[7]  * b[13], //1,1
+			  a[4]  * b[2] + a[5]  * b[6]  + a[6]  * b[10] + a[7]  * b[14], //1,2
+			  a[4]  * b[3] + a[5]  * b[7]  + a[6]  * b[11] + a[7]  * b[15], //1,3
+			  a[8]  * b[0] + a[9]  * b[4]  + a[10] * b[8]  + a[11] * b[12], //2,0
+			  a[8]  * b[1] + a[9]  * b[5]  + a[10] * b[9]  + a[11] * b[13], //2,1
+			  a[8]  * b[2] + a[9]  * b[6] + a[10] * b[10] + a[11] * b[14], //2,2
+			  a[8]  * b[3] + a[9]  * b[7] + a[10] * b[11] + a[11] * b[15], //2,3
+			  a[12] * b[0] + a[13] * b[4]  + a[14] * b[8]  + a[15] * b[12], //3,0
+			  a[12] * b[1] + a[13] * b[5]  + a[14] * b[9]  + a[15] * b[13], //3,1
+			  a[12] * b[2] + a[13] * b[6] + a[14] * b[10] + a[15] * b[14], //3,2
+			  a[12] * b[3] + a[13] * b[7] + a[14] * b[11] + a[15] * b[15] ]//3,3
+	}
+
+	//from: http://www.blackpawn.com/texts/pointinpoly/default.html
+	function is_in_triangle(px,py,ax,ay,bx,by,cx,cy) {
+		var v0 = [cx-ax,cy-ay];
+		var v1 = [bx-ax,by-ay];
+		var v2 = [px-ax,py-ay];
+
+		var dot00 = (v0[0]*v0[0]) + (v0[1]*v0[1]);
+		var dot01 = (v0[0]*v1[0]) + (v0[1]*v1[1]);
+		var dot02 = (v0[0]*v2[0]) + (v0[1]*v2[1]);
+		var dot11 = (v1[0]*v1[0]) + (v1[1]*v1[1]);
+		var dot12 = (v1[0]*v2[0]) + (v1[1]*v2[1]);
+
+		var invDenom = 1/ (dot00 * dot11 - dot01 * dot01);
+
+		var u = (dot11 * dot02 - dot01 * dot12) * invDenom;
+		var v = (dot00 * dot12 - dot01 * dot02) * invDenom;
+
+		return ((u >= 0) && (v >= 0) && (u + v <= 1));
+	}
+	
+	function matrixVectorMultiply(m, v) {
+		return  [ m[0*4 + 0] * v[0] + m[0*4 + 1] * v[1] + m[0*4 + 2] * v[2] + m[0*4 + 3] * v[3],
+				  m[1*4 + 0] * v[0] + m[1*4 + 1] * v[1] + m[1*4 + 2] * v[2] + m[1*4 + 3] * v[3],
+				  m[2*4 + 0] * v[0] + m[2*4 + 1] * v[1] + m[2*4 + 2] * v[2] + m[2*4 + 3] * v[3],
+				  m[3*4 + 0] * v[0] + m[3*4 + 1] * v[1] + m[3*4 + 2] * v[2] + m[3*4 + 3] * v[3] ];
+	}
+	
+	function vectTransform(m, v) {
+		return  [m[0] * v[0] + m[1] * v[1] + m[12],
+				 m[4] * v[0] + m[5] * v[1] + m[13]];
+	}
+	
+	function vectSvgTransform(m, v) {
+		return  [m.a * v[0] + m.c * v[1] + m.e,
+				 m.b * v[0] + m.d * v[1] + m.f];
+	}
+
+	function _add_arc(triangle_buffer, x, y, radius, startAngle, endAngle, anticlockwise) {
+		//bring angles all in [0, 2*PI] range
+		startAngle = startAngle % (2 * Math.PI);
+		endAngle = endAngle % (2 * Math.PI);
+		if (startAngle < 0) startAngle += 2*Math.PI;
+		if (endAngle < 0) endAngle += 2*Math.PI;
+
+		if (startAngle>=endAngle) {
+			endAngle += 2 * Math.PI;
+		}
+		var diff = endAngle - startAngle;
+		
+		var direction = 1;
+		if (anticlockwise) {
+			direction = -1;			
+			diff = 2*Math.PI - diff;
+			if (diff == 0) diff = 2*Math.PI;
+		}
+		
+		var length = diff * radius;
+		var nr_of_interpolation_points = length / ARC_RESOLUTION;		
+		var dangle = diff / nr_of_interpolation_points;
+		
+		var angle = startAngle;
+		for (var j = 0; j < nr_of_interpolation_points+1; j++) {
+			triangle_buffer.push(x, y, x + radius * Math.cos(angle), y + radius * Math.sin(angle));
+			angle += direction * dangle;
+		}
+	}
+	
+	function _add_dashed_arc(triangle_buffer, center, a, b, lineWidthDiv2, interpolation_scale, to_draw) {
+		var start_angle = Math.atan2(a[1] - center[1], a[0] - center[0]);
+		var stop_angle = Math.atan2(b[1] - center[1], b[0] - center[0]);
+		if (start_angle > stop_angle) { 
+			stop_angle += 2 * Math.PI;
+		}
+		var diff = stop_angle - start_angle;						
+		var nr_of_interpolation_points = Math.ceil(interpolation_scale * lineWidthDiv2) + 1;		
+		var dangle = diff / nr_of_interpolation_points;
+
+		var angle = start_angle + dangle;
+		for (var j = 0; j < nr_of_interpolation_points - 1; j++) {
+			var x = center[0] + lineWidthDiv2 * Math.cos(angle);
+			var y = center[1] + lineWidthDiv2 * Math.sin(angle);
+			triangle_buffer.push(center[0], center[1], to_draw, x, y, to_draw);
+			angle += dangle;
+		}
+	}
+	
+	var CanvasPattern = function(image, repetition) {
+		this.image = image;
+		if (repetition === null || repetition == "") {
+			this.repetition = 'repeat';
+		} else {
+			this.repetition = repetition;
+		}
+		this.thisImplementsCanvasPattern = true;
+	}
+	
+	CanvasPattern.prototype = {
+		_generateTexture(ctx, width, height) {
+			var gl = ctx.gl;
+			var program = ctx._select_program(ctx.image_program);
+
+			//This is our input texture
+			gl.activeTexture(gl.TEXTURE1);
+			var temp_texture = gl.createTexture();
+			gl.bindTexture(gl.TEXTURE_2D, temp_texture);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);		
+			gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, this.image);
+			gl.uniform1i(program.textureLocation, 1);
+
+			//This will be our output texture
+			gl.activeTexture(gl.TEXTURE0);
+			var texture = gl.createTexture();
+			gl.bindTexture(gl.TEXTURE_2D, texture);	
+			var framebuffer = gl.createFramebuffer();
+			gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+			framebuffer.width = width;
+			framebuffer.height = height;		
+			
+			gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, framebuffer.width, framebuffer.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+			gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+			gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+			
+			gl.activeTexture(gl.TEXTURE0);
+			gl.bindTexture(gl.TEXTURE_2D, texture);					
+	
+			var texPoints = [0, 0, 1, 0, 1, 1, 0, 1];			
+			gl.bindBuffer(gl.ARRAY_BUFFER, program.texCoordBuffer);
+			gl.vertexAttribPointer(program.texCoordLocation, 2, gl.FLOAT, false, 0, 0);				
+			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(texPoints), gl.STATIC_DRAW);
+			
+			gl.uniformMatrix4fv(program.transformLocation, false, ctx.projectionMatrix);
+			
+			var iw, ih;
+			if (this.image instanceof HTMLImageElement) {
+				iw = this.image.naturalWidth; ih = this.image.naturalHeight; 
+			} else {
+				iw = this.image.width; ih = this.image.height;
+			}
+			
+			if (this.repetition == 'repeat-x') {
+				height =  ih;
+			} else if (this.repetition == 'repeat-y') {
+				width = iw;
+			} else if (this.repetition == 'no-repeat') {
+				width = iw;
+				height =  ih;
+			}				
+
+			if (iw > 0 && ih > 0) {
+				for (var x=0; x < width; x+=iw) {
+					for (var y=0; y < height; y+=ih) {				
+						var points = [x, y, x+iw, y, x+iw, y+ih, x, y+ih];
+						gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);
+						gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);				
+						gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(points), gl.STATIC_DRAW);
+						gl.drawArrays(gl.TRIANGLE_FAN, 0, points.length/2);
+					}
+				}
+			}
+
+			gl.bindTexture(gl.TEXTURE_2D, null);
+			gl.bindFramebuffer(gl.FRAMEBUFFER, null);			
+			return texture;
+		}
+	}
+	
+	var RadialGradient = function(x0, y0, r0, x1, y1, r1) {
+		this.circle1 = [x0, y0, r0];
+		this.circle2 = [x1, y1, r1];
+		this.colorStops = [];
+	}
+	
+	RadialGradient.prototype = {
+		addColorStop(offset, color) {
+			this.colorStops.push([offset, parseColor(color)]);
+			this.colorStops.sort(function(a, b) {
+			  return a[0] - b[0];
+			});
+		},		
+		_generateTexture(ctx, width, height) {
+			//prepare texture
+			var gl = ctx.gl;
+			
+			var framebuffer = gl.createFramebuffer();
+			gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+			framebuffer.width = width;
+			framebuffer.height = height;
+			
+			var texture = gl.createTexture();		
+			gl.bindTexture(gl.TEXTURE_2D, texture);
+			gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, framebuffer.width, framebuffer.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+			
+			gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+			gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+
+			var program = ctx._select_program(ctx.circle_program);
+			var vertices =  [0, 0, width, 0, width, height, 0, height];
+			
+			gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);			
+			gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);	
+			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);	
+				
+			var inner_stop;
+			var inner_circle;
+			if (this.circle1[2] > this.circle2[2]) {
+				gl.clearColor(this.colorStops[0][1][0], this.colorStops[0][1][1], this.colorStops[0][1][2], this.colorStops[0][1][3]);
+				inner_circle = this.circle2;
+				inner_stop = this.colorStops[this.colorStops.length-1];
+			} else {
+				gl.clearColor(this.colorStops[this.colorStops.length-1][1][0], this.colorStops[this.colorStops.length-1][1][1], this.colorStops[this.colorStops.length-1][1][2], this.colorStops[this.colorStops.length-1][1][3]);
+				inner_circle = this.circle1;
+				inner_stop = this.colorStops[0];
+			}
+			gl.clear(gl.COLOR_BUFFER_BIT);
+			
+			for (var i = 1; i < this.colorStops.length; i++) {
+				ctx._set_zindex();
+				
+				var x = (this.circle2[0]-this.circle1[0]) * this.colorStops[i-1][0] + this.circle1[0];
+				var y = (this.circle2[1]-this.circle1[1]) * this.colorStops[i-1][0] + this.circle1[1];
+				var r = (this.circle2[2]-this.circle1[2]) * this.colorStops[i-1][0] + this.circle1[2];
+				
+				var x2 = (this.circle2[0]-this.circle1[0]) * this.colorStops[i][0] + this.circle1[0];
+				var y2 = (this.circle2[1]-this.circle1[1]) * this.colorStops[i][0] + this.circle1[1];
+				var r2 = (this.circle2[2]-this.circle1[2]) * this.colorStops[i][0] + this.circle1[2];
+
+				gl.uniform3f(program.circle1Location, x, height-y, r);
+				gl.uniform3f(program.circle2Location, x2, height-y2, r2);
+				gl.uniform4f(program.color1Location, this.colorStops[i-1][1][0], this.colorStops[i-1][1][1], this.colorStops[i-1][1][2], this.colorStops[i-1][1][3]);
+				gl.uniform4f(program.color2Location, this.colorStops[i][1][0], this.colorStops[i][1][1], this.colorStops[i][1][2], this.colorStops[i][1][3]);
+				
+				gl.drawArrays(gl.TRIANGLE_FAN, 0, vertices.length/2);
+			}
+
+			gl.uniform3f(program.circle2Location, inner_circle[0], height - inner_circle[1], inner_circle[2]);
+			gl.uniform3f(program.circle1Location, inner_circle[0], height - inner_circle[1], 0);
+			gl.uniform4f(program.color1Location, inner_stop[1][0], inner_stop[1][1], inner_stop[1][2], inner_stop[1][3]);
+			gl.uniform4f(program.color2Location, inner_stop[1][0], inner_stop[1][1], inner_stop[1][2], inner_stop[1][3]);
+
+			gl.drawArrays(gl.TRIANGLE_FAN, 0, vertices.length/2);
+			
+			//retore the buffer we were drawing in
+			gl.bindTexture(gl.TEXTURE_2D, null);
+			gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+			return texture;				
+		}
+	}
+	
+	var LinearGradient = function(x0, y0, x1, y1) {
+		this.colorStops = [];
+		this.line = [x1 - x0, y1 - y0];
+		this.base = [x0, y0];
+		
+		//we precaculate |line|^2, as we'll be using it alot
+		this.len_sq = Math.pow(this.line[0],2) + Math.pow(this.line[1], 2);
+	}
+		
+	LinearGradient.prototype = {
+		addColorStop(offset, color) {
+			this.colorStops.push([offset, parseColor(color)]);
+			this.colorStops.sort(function(a, b) {
+			  return a[0] - b[0];
+			});
+		},
+		_calculate_color(x,y) {
+			//project [x,y]-base onto line. proj = [x.y].line / |line|^2 * line;
+			var u = ((x - this.base[0]) * this.line[0] + (y - this.base[1]) * this.line[1]) / this.len_sq;
+			//now u is our offset
+			var prev_stop, next_stop = this.colorStops[0];
+			for (var i = this.colorStops.length-1; i >= 0; i--) {	
+				if (u > this.colorStops[i][0]) {
+					prev_stop = this.colorStops[i];
+					next_stop = this.colorStops[i+1];
+					break;
+				}
+			}		
+			if (!prev_stop) {
+				return next_stop[1];
+			} else if (!next_stop) {
+				return prev_stop[1];
+			} else {
+				var w = ((u - prev_stop[0]) / (next_stop[0] - prev_stop[0]))
+				var color = [(1-w) * prev_stop[1][0] + w * next_stop[1][0], (1-w) * prev_stop[1][1] + w * next_stop[1][1], (1-w) * prev_stop[1][2] + w * next_stop[1][2], (1-w) * prev_stop[1][3] + w * next_stop[1][3]];
+				return color;
+			}		
+		},
+		_generateTexture(ctx, width, height) {
+			function intersection(box, p, v) {
+				//AABB ray intersection, slab method
+				var tmin = -999999, tmax = 999999;				
+				if (v[0] != 0) {
+					var tx1 = (box.x - p[0])/v[0];
+					var tx2 = (box.x + box.width - p[0])/v[0];
+					tmin = Math.max(tmin, Math.min(tx1, tx2));
+					tmax = Math.min(tmax, Math.max(tx1, tx2));
+				}
+				if (v[1] != 0) {
+					var ty1 = (box.x - p[1])/v[1];
+					var ty2 = (box.y + box.height - p[1])/v[1];
+					tmin = Math.max(tmin, Math.min(ty1, ty2));
+					tmax = Math.min(tmax, Math.max(ty1, ty2));
+				}
+				if (tmax >= tmin) { //tmin != tmax is technically an intersection in the corner, but we don't need that
+					var s1 = [p[0] + tmin * v[0], p[1] + tmin * v[1]]
+					var s2 = [p[0] + tmax * v[0], p[1] + tmax * v[1]]
+					return [s1, s2];
+				} else {
+					return [];
+				}
+			}
+			
+			var line_orth = [-this.line[1], this.line[0]];
+			var box = { x:0, y:0, width:width, height:height }	
+			
+			//find intersections
+			var intersections = []
+			for (var i = 0; i < this.colorStops.length; i++) {
+				var p = [this.base[0] + this.colorStops[i][0] * this.line[0], this.base[1] + this.colorStops[i][0] * this.line[1]]
+				var intersection_points = intersection(box, p, line_orth);
+				for (var j in intersection_points) {
+					intersection_points[j].push(this.colorStops[i][1])
+					intersections.push(intersection_points[j]);
+				}
+			}
+			
+			//add corners and the points opposite the corner in direction of line_orth
+			var corners = [[0,0, this._calculate_color(0,0)], [width,0, this._calculate_color(width,0)], [width,height, this._calculate_color(width,height)], [0,height, this._calculate_color(0,height)]]
+			for (var i in corners) {
+				var intersection_points = intersection(box, [corners[i][0], corners[i][1]], line_orth);
+				for (var j in intersection_points) {
+					intersection_points[j].push(corners[i][2])
+					intersections.push(intersection_points[j]);
+				}
+						
+			}
+			
+			//sort in the direction of line
+			var _this = this;
+			intersections.sort(function(a,b) {
+				var comp = ((a[0] - _this.base[0]) * _this.line[0] + (a[1] - _this.base[1]) * _this.line[1])
+				          -((b[0] - _this.base[0]) * _this.line[0] + (b[1] - _this.base[1]) * _this.line[1]);
+				if (comp != 0) return comp;	
+				else {
+					comp = a[0] - b[0]
+					if (comp != 0) return comp;	
+					else {
+						return a[1] - b[1]
+					}
+				}
+			});
+			
+			//make all points unique
+			var unique = [intersections[0]];
+			for (var i = 1; i < intersections.length; i++) {
+				if (intersections[i][0] != intersections[i-1][0] || intersections[i][1] != intersections[i-1][1]) {
+					unique.push(intersections[i]);
+				}
+			}
+			intersections = unique;
+			
+			//the result here is that from a bunch of corners and intersection points, we've built something we can
+			//draw as a gl.TRIANGLE_STRIP.
+			
+			//flatten
+			var vertices = [];
+			var colors = [];
+			for (var i in intersections) {
+				vertices.push(intersections[i][0], intersections[i][1]);
+				colors.push(intersections[i][2][0], intersections[i][2][1], intersections[i][2][2], intersections[i][2][3]);
+			}
+
+			//prepare texture
+			var gl = ctx.gl;
+			
+			var framebuffer = gl.createFramebuffer();
+			gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+			framebuffer.width = width;
+			framebuffer.height = height;
+			
+			var texture = gl.createTexture();		
+			gl.bindTexture(gl.TEXTURE_2D, texture);
+			
+			gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, framebuffer.width, framebuffer.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+			
+			gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+			gl.bindTexture(gl.TEXTURE_2D, null);
+			gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+			var tempFrameBuffer = gl.getParameter(gl.FRAMEBUFFER_BINDING);
+			gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+						
+			//draw
+			var program = ctx._select_program(ctx.gradient_program);
+			
+			gl.bindBuffer(gl.ARRAY_BUFFER, program.vertexBuffer);			
+			gl.vertexAttribPointer(program.positionLocation, 2, gl.FLOAT, false, 0, 0);	
+			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);	
+			
+			gl.bindBuffer(gl.ARRAY_BUFFER, program.colorBuffer);
+			gl.vertexAttribPointer(program.colorLocation, 4, gl.FLOAT, false, 0, 0);
+			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colors), gl.STATIC_DRAW);			
+
+			gl.activeTexture(gl.TEXTURE0);
+			gl.bindTexture(gl.TEXTURE_2D, texture);
+			gl.drawArrays(gl.TRIANGLE_STRIP, 0, vertices.length/2);
+
+			//retore the buffer we were drawing in
+			gl.bindFramebuffer(gl.FRAMEBUFFER, tempFrameBuffer);
+
+			return texture;				
+		}
+	}
+
+	var ImageData = function() {}
+	
+	var Path2D = function() {
+		this.paths = [[]];
+		this.closed = [false];
+	}
+
+	Path2D.prototype = {
+		addPath(paths, transform) {
+			for (var i in paths) {
+				var path = paths[i];
+				var new_path = [];
+				if (!(typeof transform === undefined)) {
+					for (var j = 0; j < path.length; j+=2) {
+						var point_tranformed = vectSvgTransform(transform, [path[j], path[j+1]]);
+						new_path.push(point_tranformed[0], point_tranformed[1]);
+					}
+				} else {
+					for (var j in path)
+						new_path.push(path[j]);
+				}
+				this.paths.push(new_path);
+				this.closed.push(paths.closed[i]);
+			}
+		},
+		closePath() {
+			if (this.paths.length > 0) {
+				var currentPath = this.paths[this.paths.length-1];
+				if (currentPath.length >= 2) {
+					this.closed[this.paths.length-1] = true;
+					this.paths.push([currentPath[0], currentPath[1]]);
+					this.closed.push(false);
+				}		
+			}
+		},
+		moveTo(x,y) {
+			if (this.paths[this.paths.length-1].length == 0) {
+				this.paths[this.paths.length-1].push(x,y);
+			} else {
+				this.paths.push([x,y]);
+				this.closed.push(false);
+			}
+		},
+		lineTo(x,y) {
+			var currentPath = this.paths[this.paths.length-1];
+			currentPath.push(x,y);
+		},
+		bezierCurveTo(x1, y1, x2, y2, x3, y3) {
+			if (!isFinite(x1) || !isFinite(y1) || !isFinite(x2) || !isFinite(y2) || !isFinite(x3) || !isFinite(y3)) return;
+			
+			var currentPath = this.paths[this.paths.length-1];
+			var x0 = currentPath[currentPath.length-2], y0 = currentPath[currentPath.length-1];
+			function calc(t) {
+				//https://en.wikipedia.org/wiki/B%C3%A9zier_curve#Cubic_B.C3.A9zier_curves
+				var coeff = [Math.pow(1-t, 3), 3 * Math.pow(1-t, 2) * t, 3 * (1-t) * Math.pow(t,2), Math.pow(t,3)];
+				return [coeff[0] * x0 + coeff[1] * x1 + coeff[2] * x2 + coeff[3] * x3, coeff[0] * y0 + coeff[1] * y1 + coeff[2] * y2 + coeff[3] * y3];
+			}
+			var length_estimate =  Math.sqrt(Math.pow(x3 - x2, 2) +  Math.pow(y3 - y2, 2))
+								 + Math.sqrt(Math.pow(x2 - x1, 2) +  Math.pow(y2 - y1, 2))
+								 + Math.sqrt(Math.pow(x1 - x0, 2) +  Math.pow(y1 - y0, 2));							 
+			var step = BEZIER_CURVE_RESOLUTION / length_estimate;
+			step = Math.min(step, 0.5); //do at least 1 step
+			
+			for (var t = step; t < 1; t+=step) {
+				var point = calc(t);
+				currentPath.push(point[0], point[1]);
+			}
+			currentPath.push(x3, y3);
+		},
+		quadraticCurveTo(x1, y1, x2, y2) {
+			if (!isFinite(x1) || !isFinite(y1) || !isFinite(x2) || !isFinite(y2)) return;
+			var currentPath = this.paths[this.paths.length-1];
+			var x0 = currentPath[currentPath.length-2], y0 = currentPath[currentPath.length-1];
+			
+			function calc(t) {
+				//https://en.wikipedia.org/wiki/B%C3%A9zier_curve#Quadratic_B.C3.A9zier_curves
+				var coeff = [Math.pow(1-t, 2), 2 * (1-t) * t, Math.pow(t,2)];
+				return [coeff[0] * x0 + coeff[1] * x1 + coeff[2] * x2, coeff[0] * y0 + coeff[1] * y1 + coeff[2] * y2];
+			}
+			var length_estimate =  Math.sqrt(Math.pow(x2 - x1, 2) +  Math.pow(y2 - y1, 2))
+								 + Math.sqrt(Math.pow(x1 - x0, 2) +  Math.pow(y1 - y0, 2));
+					 
+			var step = BEZIER_CURVE_RESOLUTION / length_estimate;
+			step = Math.min(step, 0.5); //do at least 1 step
+			
+			for (var t = step; t < 1; t+=step) {
+				var point = calc(t);
+				currentPath.push(point[0], point[1]);
+			}
+			currentPath.push(x2, y2);			
+		},
+		ellipse(x, y, radiusX, radiusY, rotation, startAngle, endAngle, anticlockwise) {
+			if (startAngle == endAngle) return;
+			var fullCircle = anticlockwise ? Math.abs(startAngle-endAngle) >= (2*Math.PI) : Math.abs(endAngle-startAngle) >= (2*Math.PI);
+			
+			//bring angles all in [0, 2*PI] range
+			startAngle = startAngle % (2 * Math.PI);
+			endAngle = endAngle % (2 * Math.PI);
+			if (startAngle < 0) startAngle += 2*Math.PI;
+			if (endAngle < 0) endAngle += 2*Math.PI;
+
+			if (startAngle>=endAngle) {
+				endAngle += 2 * Math.PI;
+			}
+
+			var diff = endAngle - startAngle;
+
+			var direction = 1;
+			if (anticlockwise) {
+				direction = -1;			
+				diff = 2*Math.PI - diff;
+			}
+			
+			if (fullCircle) diff = 2*Math.PI;
+			
+			var length = (diff * radiusX + diff * radiusY) / 2; 
+			var nr_of_interpolation_points = length / ARC_RESOLUTION;		
+			var dangle = diff / nr_of_interpolation_points;
+
+			var currentPath = this.paths[this.paths.length-1];
+			
+			var angle = startAngle;
+			var cos_rotation = Math.cos(rotation);
+			var sin_rotation = Math.sin(rotation);
+			for (var j = 0; j < nr_of_interpolation_points; j++) {				
+				var x1 = radiusX * Math.cos(angle);
+				var y1 = radiusY * Math.sin(angle);
+				var x2 = x + x1 * cos_rotation - y1 * sin_rotation;
+				var y2 = y + x1 * sin_rotation + y1 * cos_rotation;		
+				currentPath.push(x2, y2);
+				angle += direction * dangle;
+			}
+			var x1 = radiusX * Math.cos(endAngle);
+			var y1 = radiusY * Math.sin(endAngle);
+			currentPath.push(x + x1 * cos_rotation - y1 * sin_rotation, y + x1 * sin_rotation + y1 * cos_rotation);
+		},
+		arc(x, y, radius, startAngle, endAngle, anticlockwise) {			
+			//bring angles all in [0, 2*PI] range
+			if (startAngle == endAngle) return;
+			var fullCircle = anticlockwise ? Math.abs(startAngle-endAngle) >= (2*Math.PI) : Math.abs(endAngle-startAngle) >= (2*Math.PI);
+
+			startAngle = startAngle % (2 * Math.PI);
+			endAngle = endAngle % (2 * Math.PI);
+			
+			if (startAngle < 0) startAngle += 2*Math.PI;
+			if (endAngle < 0) endAngle += 2*Math.PI;
+
+			if (startAngle>=endAngle) {
+				endAngle += 2 * Math.PI;
+			}
+			
+			var diff = endAngle - startAngle;
+			var direction = 1;
+			if (anticlockwise) {
+				direction = -1;			
+				diff = 2*Math.PI - diff;
+			}
+			
+			if (fullCircle) diff = 2*Math.PI;
+			
+			var length = diff * radius;
+			var nr_of_interpolation_points = length / ARC_RESOLUTION;		
+			var dangle = diff / nr_of_interpolation_points;
+			
+			var currentPath = this.paths[this.paths.length-1];
+
+			var angle = startAngle;
+			for (var j = 0; j < nr_of_interpolation_points; j++) {
+				currentPath.push(x + radius * Math.cos(angle), y + radius * Math.sin(angle));
+				angle += direction * dangle;
+			}
+			currentPath.push(x + radius * Math.cos(endAngle), y + radius * Math.sin(endAngle));
+						
+		},
+		arcTo(x1, y1, x2, y2, radius) {
+			var currentPath = this.paths[this.paths.length-1];
+			var x0 = currentPath[currentPath.length-2], y0 = currentPath[currentPath.length-1];
+			
+			//a = -incoming vector, b = outgoing vector to x1, y1
+			var a = [x0 - x1, y0 - y1];
+			var b = [x2 - x1, y2 - y1];
+			
+			//normalize
+			var l_a = Math.sqrt(Math.pow(a[0], 2) + Math.pow(a[1], 2));
+			var l_b = Math.sqrt(Math.pow(b[0], 2) + Math.pow(b[1], 2));
+			a[0] /= l_a; a[1] /= l_a; b[0] /= l_b; b[1] /= l_b;
+			var angle = Math.atan2(a[1], a[0]) - Math.atan2(b[1], b[0]);
+			
+			//work out tangent points using tan(θ) = opposite / adjacent; angle/2 because hypotenuse is the bisection of a,b
+			var tan_angle_div2 = Math.tan(angle/2);
+			var adj_l = (radius/tan_angle_div2);
+			
+			var tangent_point1 =  [x1 + a[0] * adj_l, y1 + a[1] * adj_l];
+			var tangent_point2 =  [x1 + b[0] * adj_l, y1 + b[1] * adj_l];
+
+			currentPath.push(tangent_point1[0], tangent_point1[1])
+			
+			var bisec = [(a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0];
+			var bisec_l = Math.sqrt(Math.pow(bisec[0], 2) + Math.pow(bisec[1], 2));
+			bisec[0] /= bisec_l; bisec[1] /= bisec_l;
+				
+			var hyp_l = Math.sqrt(Math.pow(radius,2) + Math.pow(adj_l,2))
+			var center = [x1 + hyp_l * bisec[0], y1 + hyp_l * bisec[1]];
+			
+			var startAngle = Math.atan2(tangent_point1[1] - center[1], tangent_point1[0] - center[0]);
+			var endAngle = Math.atan2(tangent_point2[1] - center[1], tangent_point2[0] - center[0]);
+			
+			this.arc(center[0], center[1], radius, startAngle, endAngle)
+			
+			currentPath.push(tangent_point2[0], tangent_point2[1])		
+		},
+		rect(x, y, width, height) {
+			this.paths.push([x, y, x+width, y, x+width, y+height, x, y+height], [x, y]);
+			this.closed.push(true, false);
+		},
+	}
+	
+
 
 	var color_table = {};
 	function parseColor(css_str) {
